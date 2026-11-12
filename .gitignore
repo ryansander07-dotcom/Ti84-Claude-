@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Calculator build output
+calculator/bin/
+calculator/obj/
+
+# OS
+.DS_Store
