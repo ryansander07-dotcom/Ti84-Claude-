@@ -11,12 +11,12 @@
 
 namespace {
 
-struct Network {
+struct SavedNetwork {
     std::string ssid;
     std::string password;
 };
 
-std::vector<Network> saved;  // most recently added first
+std::vector<SavedNetwork> saved;  // most recently added first
 SemaphoreHandle_t lock;
 Preferences prefs;
 
@@ -31,7 +31,7 @@ void load() {
     }
     prefs.end();
     if (strlen(WIFI_SSID) > 0) {
-        bool known = std::any_of(saved.begin(), saved.end(), [](const Network &n) { return n.ssid == WIFI_SSID; });
+        bool known = std::any_of(saved.begin(), saved.end(), [](const SavedNetwork &n) { return n.ssid == WIFI_SSID; });
         if (!known) saved.push_back({WIFI_SSID, WIFI_PASSWORD});
     }
 }
@@ -66,10 +66,10 @@ void connect_best() {
     if (saved.empty()) return;
     int n = WiFi.scanNetworks();
     int best_rssi = -1000;
-    const Network *best = nullptr;
+    const SavedNetwork *best = nullptr;
     for (int i = 0; i < n; i++) {
         std::string ssid = WiFi.SSID(i).c_str();
-        for (const Network &net : saved) {
+        for (const SavedNetwork &net : saved) {
             if (net.ssid == ssid && WiFi.RSSI(i) > best_rssi) {
                 best_rssi = WiFi.RSSI(i);
                 best = &net;
@@ -131,7 +131,7 @@ bool wifi_join(const std::string &ssid, const std::string &password) {
     if (xSemaphoreTake(lock, pdMS_TO_TICKS(30000)) != pdTRUE) return false;
     bool ok = connect_to(ssid, password, 15000);
     if (ok) {
-        saved.erase(std::remove_if(saved.begin(), saved.end(), [&](const Network &n) { return n.ssid == ssid; }),
+        saved.erase(std::remove_if(saved.begin(), saved.end(), [&](const SavedNetwork &n) { return n.ssid == ssid; }),
                     saved.end());
         saved.insert(saved.begin(), {ssid, password});
         if (saved.size() > MAX_SAVED_NETWORKS) saved.resize(MAX_SAVED_NETWORKS);
