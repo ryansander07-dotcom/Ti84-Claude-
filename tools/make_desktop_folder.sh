@@ -32,6 +32,34 @@ open -R "arTIfiCE_v2.1.8xp"
 CMD
 chmod +x "$C/Send to Calculator.command"
 
+# The apps-menu version: the app plus its one-time installer.
+A="$C/Apps menu version"
+mkdir -p "$A"
+cp "$REPO/calculator/send-to-calculator/CLAPP0.8xv" "$REPO/calculator/send-to-calculator/CLINST.8xp" "$A/"
+cat > "$A/How to install as an app.txt" <<'TXT'
+Put CLAUDE under [apps] instead of [prgm]
+
+You need clibs.8xg and arTIfiCE_v2.1.8xp on the calculator already
+(the files one folder up). Then:
+
+1. Send CLAPP0.8xv and CLINST.8xp to the calculator (drag them onto it in
+   TI Connect CE, like the other files).
+2. On the calculator: [prgm] > A > [enter]. In the arTIfiCE list pick CLINST.
+3. It says "Installing: CLAUDE ... Do not reset!" Wait, and don't remove the
+   batteries or press [on] until it finishes (a few seconds). It writes the app
+   into the calculator's archive, so interrupting it can corrupt the archive.
+4. When it asks "Delete installer files?", say yes.
+5. Press [apps] and pick CLAUDE.
+
+If it says "Out of archive space": [2nd] [+] > 2: Mem Management, or run the
+GarbageCollect command from [2nd] [0] (catalog), then try again.
+If it says "Already installed": delete the CLAUDE app in [2nd] [+] > 2 > Apps
+first, then run CLINST again (that's how you update it).
+
+The app still uses the C libraries (clibs). The old CLAUDE program can stay or be
+deleted; they don't interfere.
+TXT
+
 # 2: the dongle
 D="$OUT/2 - Dongle"
 mkdir -p "$D"

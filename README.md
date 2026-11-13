@@ -120,6 +120,12 @@ up to OS 5.8.4; don't update the OS).
    that opens, pick **CLAUDE** and press **[enter]**. Press **[mode]** to leave the
    arTIfiCE menu. Run **A** again whenever you want to start CLAUDE.
 
+**Under [apps] instead:** `tools/build_app.sh` builds CLAUDE as a Flash App
+(`CLAPP0.8xv`) plus a one-time installer (`CLINST.8xp`, from CE-Programming's
+app_tools). Send both, run **A** and pick **CLINST**, wait for it to finish (don't press
+[on] or pull the batteries while it writes to the archive), then open **[apps] >
+CLAUDE**. The C libraries still need to be on the calculator.
+
 You can try the calculator program before the dongle is built: plug the calculator into
 your computer with a normal USB cable, start `CLAUDE`, and run the bridge:
 
