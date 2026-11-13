@@ -202,12 +202,18 @@ ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t 
     if (head.find("transfer-encoding: chunked") != std::string::npos) payload = dechunk(payload);
 
     int status = atoi(head.c_str() + head.find(' ') + 1);
-    if (status == 401) return fail("API key not accepted. Check secrets.h and reflash.");
-    if (status == 403) return fail("API key can't use this model or has no credit.");
-    if (status == 429) return fail("Too many requests. Wait a minute and try again.");
     if (status != 200) {
-        char msg[64];
-        snprintf(msg, sizeof msg, "Claude API error %d. Try again.", status);
+        // The API explains every error in {"error": {"message": ...}}.
+        JsonDocument err;
+        std::string reason;
+        if (!deserializeJson(err, payload.data(), payload.size())) reason = err["error"]["message"] | "";
+        if (reason.find("credit balance") != std::string::npos)
+            return fail("No API credit left. Add credits at platform.claude.com under Billing.");
+        if (status == 401) return fail("API key not accepted. Check secrets.h and reflash.");
+        if (status == 403) return fail("API key can't use this model or has no credit.");
+        if (status == 429) return fail("Too many requests. Wait a minute and try again.");
+        std::string msg = "Claude API error " + std::to_string(status) + ".";
+        if (!reason.empty()) msg += " " + reason.substr(0, 120);
         return {false, msg};
     }
 
