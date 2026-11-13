@@ -93,9 +93,19 @@ up to OS 5.8.4; don't update the OS).
    ```
 
    This makes `calculator/bin/CLAUDE.8xp`.
-2. With TI Connect CE, send `CLAUDE.8xp` and the toolchain's `clibs.8xg` (the CE C
-   libraries: graphx, usbdrvce, srldrvce) to the calculator.
-3. Run arTIfiCE, then start `CLAUDE` from it (or from the Cesium shell it can install).
+2. Get the two other files:
+   - `clibs.8xg`, the CE C libraries (graphx, usbdrvce, srldrvce), from
+     [CE-Programming/libraries](https://github.com/CE-Programming/libraries/releases).
+   - arTIfiCE from [YvanTT/arTIfiCE](https://github.com/YvanTT/arTIfiCE/releases):
+     **`arTIfiCE_v2.1.8xp` for OS 5.8.4 and earlier** (including 5.8.2). v3 is only for
+     OS 5.8.5 and installs differently.
+3. With TI Connect CE, send `arTIfiCE_v2.1.8xp`, `clibs.8xg` and `CLAUDE.8xp` to the
+   calculator. On an Apple Silicon Mac, TI Connect CE needs Rosetta
+   (`softwareupdate --install-rosetta`).
+4. On the calculator: press **[prgm]**, choose **TI-Basic** if it asks, pick the first
+   program, **A** (that's arTIfiCE), and press **[enter]** twice. In the arTIfiCE menu
+   that opens, pick **CLAUDE** and press **[enter]**. Press **[mode]** to leave the
+   arTIfiCE menu. Run **A** again whenever you want to start CLAUDE.
 
 You can try the calculator program before the dongle is built: plug the calculator into
 your computer with a normal USB cable, start `CLAUDE`, and run the bridge:
