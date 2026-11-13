@@ -99,9 +99,22 @@ BOSS_FIT = 0.2
 MAGNET_INSET = 6.5        # boss centers from the cover's edges
 
 # ---- mini: plain XIAO ESP32S3, no camera ------------------------------------------
-MINI_BOARD_HEIGHT = 4.5   # board plus the USB-C port and shield on top
+MINI_BOARD_HEIGHT = 4.5   # board plus the USB-C port and shield on top (W11: 4.5 mm)
 MINI_FLOOR = 1.2
 MINI_TAPE = 0.5           # foam tape between the battery and the board
+# The no-camera box holds the Meshnology W11 main board (camera board left off).
+# From Meshnology's drawing: 18.00 x 23.50 mm, 24.54 mm with the USB-C, 4.5 mm tall.
+MINI_BOARD_WIDTH = 18.0
+MINI_BOARD_LENGTH = 24.54
+# Power switch on the side: an SS12D00-style mini slide switch, wired between the
+# battery's red wire and the board's B+ pad. It lies with its top (the lever side)
+# against the inside of the +X wall, lever out through a slot.
+SWITCH_LENGTH = 8.6       # body, along the wall
+SWITCH_WIDTH = 3.6        # body, top to bottom of the box
+SWITCH_DEPTH = 3.5        # body, from the wall inward (the pins stick out further)
+SWITCH_PINS = 3.0         # room for the pins and wires behind the body
+SWITCH_LEVER = 1.5        # lever cross-section
+SWITCH_TRAVEL = 2.0       # how far the lever slides
 
 SEGMENTS = 64
 OUT = Path(__file__).resolve().parent / "stl"
@@ -310,7 +323,12 @@ MINI_W = MINI_INNER_W + 2 * COVER_WALL
 MINI_L = MINI_INNER_L + 2 * COVER_WALL
 MINI_BOARD_Z = BATTERY_THICKNESS + MINI_TAPE         # bottom of the board, above the floor
 MINI_INNER_H = MINI_BOARD_Z + MINI_BOARD_HEIGHT + CLEARANCE
-MINI_BOARD_CY = MINI_CAVITY_L / 2 - BOARD_LENGTH / 2 - CLEARANCE
+MINI_BOARD_CY = MINI_CAVITY_L / 2 - MINI_BOARD_LENGTH / 2 - CLEARANCE
+# The switch sits at the end away from the USB-C, above the battery, where the
+# board doesn't reach.
+SWITCH_CY = -MINI_CAVITY_L / 2 + 0.8 + SWITCH_LENGTH / 2
+SWITCH_CZ = BATTERY_THICKNESS + 0.3 + SWITCH_WIDTH / 2  # center height above the floor, just over the battery
+SWITCH_WALL_X = MINI_INNER_W / 2                    # inside face of the +X wall
 MINI_RADIUS = 3.0
 
 
@@ -324,20 +342,30 @@ def mini_cover():
     c = shell(MINI_W, MINI_L, MINI_INNER_H, MINI_RADIUS)
     # USB-C notch in the +Y wall, open at the top, so the plug's plastic overmold
     # can pass the wall and the plug seats fully.
-    c -= cube(-USB_OPENING_WIDTH / 2, USB_OPENING_WIDTH / 2, MINI_BOARD_CY + BOARD_LENGTH / 2 - 0.5, MINI_L / 2 + 1,
+    c -= cube(-USB_OPENING_WIDTH / 2, USB_OPENING_WIDTH / 2, MINI_BOARD_CY + MINI_BOARD_LENGTH / 2 - 0.5, MINI_L / 2 + 1,
               MINI_BOARD_Z - 1.5, MINI_INNER_H + COVER_TOP + 1)
     # Rails down each long side of the board and a stop at its far end, hanging
     # from the top. They end above the battery.
     rail_z0 = MINI_BOARD_Z + 1.0
-    y0, y1 = MINI_BOARD_CY - BOARD_LENGTH / 2, MINI_BOARD_CY + BOARD_LENGTH / 2
+    y0, y1 = MINI_BOARD_CY - MINI_BOARD_LENGTH / 2, MINI_BOARD_CY + MINI_BOARD_LENGTH / 2
     for sx in (-1, 1):
-        x = sx * (BOARD_WIDTH / 2 + CLEARANCE + 0.6)
+        x = sx * (MINI_BOARD_WIDTH / 2 + CLEARANCE + 0.6)
         c += cube(x - 0.6, x + 0.6, y0 + 2, y1 - 2, rail_z0, MINI_INNER_H + 0.01)
     c += cube(-5, 5, y0 - CLEARANCE - 1.2, y0 - CLEARANCE, rail_z0, MINI_INNER_H + 0.01)
     # Vents over the board.
     for i in range(3):
         x = -4 + i * 4
         c -= cube(x - 0.6, x + 0.6, MINI_BOARD_CY - 5, MINI_BOARD_CY + 5, MINI_INNER_H - 1, MINI_INNER_H + COVER_TOP + 1)
+    # Power switch: a slot for the lever in the +X wall, and two blocks hanging from
+    # the lid that hold the switch body against the wall at both ends.
+    slot_l = SWITCH_LEVER + SWITCH_TRAVEL + 0.8
+    slot_h = SWITCH_LEVER + 0.8
+    c -= cube(SWITCH_WALL_X - 1, MINI_W / 2 + 1, SWITCH_CY - slot_l / 2, SWITCH_CY + slot_l / 2,
+              SWITCH_CZ - slot_h / 2, SWITCH_CZ + slot_h / 2)
+    for sy in (-1, 1):
+        y_in = SWITCH_CY + sy * (SWITCH_LENGTH / 2 + 0.2)
+        c += cube(SWITCH_WALL_X - SWITCH_DEPTH, SWITCH_WALL_X + 0.01, min(y_in, y_in + sy * 1.2), max(y_in, y_in + sy * 1.2),
+                  SWITCH_CZ - SWITCH_WIDTH / 2, MINI_INNER_H + 0.01)
     return print_top_down(c, MINI_INNER_H + COVER_TOP)
 
 

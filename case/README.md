@@ -113,10 +113,19 @@ the two screws in before pressing the cover on (the screws sit under the cover).
 3. Set the pod on the door. The bosses line it up and the magnets snap it down. To take
    it off, lift it straight up.
 
-**Mini:** solder the battery to the XIAO the same way as for the doors. Lay the battery
-in the base, wire end toward the USB-C notch. Put a layer of foam tape on the battery
-and set the board on it, USB-C toward the notch. Press the cover on; rails inside it
-keep the board from sliding.
+**Mini (no camera):** it holds the Meshnology W11 main board with the camera board left
+off, and has a power switch on the side (an SS12D00-style mini slide switch).
+1. Wire the battery through the switch: battery black to **B−** on the board, battery red
+   to one outer pin of the switch, and the switch's middle pin to **B+**. Do one wire at a
+   time so bare ends never touch.
+2. Lay the battery in the base, wire end toward the USB-C notch.
+3. Push the switch into the lid from the inside, lever through the side slot. The two
+   blocks either side hold it; a dab of hot glue keeps it there.
+4. Put foam tape on the battery, set the board on it with USB-C toward the notch, and
+   press the lid on. Rails inside keep the board from sliding.
+
+Off disconnects the battery so nothing drains it. Plugged into the calculator, the
+board runs either way, but the battery only charges while the switch is on.
 
 Plug in the OTG cable and run it to the calculator's USB port at the top. Keep the
 original battery door in case you want to go back.
