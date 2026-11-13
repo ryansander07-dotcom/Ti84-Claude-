@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Preferences.h>
+#include <ESPmDNS.h>
 #include <WiFi.h>
 
 #include <algorithm>
@@ -84,7 +85,15 @@ void connect_best() {
 }
 
 void keep_connected(void *) {
+    bool mdns_up = false;
     for (;;) {
+        // Answer to ti84-claude.local on the network, so a computer can check the
+        // dongle is running even when it's on battery with no USB attached.
+        if (WiFi.status() == WL_CONNECTED && !mdns_up) mdns_up = MDNS.begin("ti84-claude");
+        if (WiFi.status() != WL_CONNECTED && mdns_up) {
+            MDNS.end();
+            mdns_up = false;
+        }
         if (WiFi.status() != WL_CONNECTED && xSemaphoreTake(lock, 0) == pdTRUE) {
             connect_best();
             xSemaphoreGive(lock);

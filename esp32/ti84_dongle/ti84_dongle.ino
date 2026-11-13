@@ -11,6 +11,7 @@
 #include <Arduino.h>
 #include <USB.h>
 #include <USBCDC.h>
+#include <WiFi.h>
 
 #include <string>
 #include <vector>
@@ -256,6 +257,7 @@ static void handle(const std::string &raw) {
         if (wifi_connected()) {
             send_wrapped('S', "Wi-Fi: " + wifi_network());
             send_line("S:Signal: " + std::to_string(wifi_signal()) + " dBm");
+            send_line("S:IP: " + std::string(WiFi.localIP().toString().c_str()));
         } else {
             send_line("S:Wi-Fi: not connected");
         }
@@ -270,24 +272,8 @@ static void handle(const std::string &raw) {
     send_error("Unknown message.");
 }
 
-// A short blink of the board's user LED every 2 s shows the dongle is running,
-// even on battery alone (the charge and power LEDs only light on USB power).
-// On XIAO-style boards like the W11 it's on GPIO21 and lights when driven low.
-static const int HEARTBEAT_LED = 21;
-static void heartbeat() {
-    static uint32_t last = 0;
-    uint32_t now = millis();
-    if (now - last >= 2000) {
-        last = now;
-        digitalWrite(HEARTBEAT_LED, LOW);   // on
-    } else if (now - last >= 60) {
-        digitalWrite(HEARTBEAT_LED, HIGH);  // off
-    }
-}
-
 void setup() {
-    pinMode(HEARTBEAT_LED, OUTPUT);
-    digitalWrite(HEARTBEAT_LED, HIGH);
+
     Serial.begin(115200);  // debug log on the UART pins, not the calculator
     USB.productName("TI-84 Claude Link");
     USB.manufacturerName("ti84-claude");
@@ -304,7 +290,6 @@ void setup() {
 }
 
 void loop() {
-    heartbeat();
     while (Calc.available()) {
         int c = Calc.read();
         if (c < 0) break;
