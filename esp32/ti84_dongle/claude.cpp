@@ -12,6 +12,7 @@
 #include <cstring>
 
 #include "config.h"
+#include "credit.h"
 #include "secrets.h"
 #include "tls_roots.h"
 
@@ -207,8 +208,10 @@ ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t 
         JsonDocument err;
         std::string reason;
         if (!deserializeJson(err, payload.data(), payload.size())) reason = err["error"]["message"] | "";
-        if (reason.find("credit balance") != std::string::npos)
-            return fail("No API credit left. Add credits at platform.claude.com under Billing.");
+        if (reason.find("credit balance") != std::string::npos) {
+            credit_mark_empty();
+            return fail("No API credit left. Add credits at platform.claude.com under Billing, then enter the new balance in the Credit menu.");
+        }
         if (status == 401) return fail("API key not accepted. Check secrets.h and reflash.");
         if (status == 403) return fail("API key can't use this model or has no credit.");
         if (status == 429) return fail("Too many requests. Wait a minute and try again.");
@@ -221,10 +224,18 @@ ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t 
     filter["stop_reason"] = true;
     filter["content"][0]["type"] = true;
     filter["content"][0]["text"] = true;
+    filter["model"] = true;
+    filter["usage"] = true;
     JsonDocument doc;
     if (deserializeJson(doc, payload.data(), payload.size(), DeserializationOption::Filter(filter))) {
         return fail("Claude's reply got garbled. Try again.");
     }
+
+    // Count what this answer cost, for the credit estimate. "model" is the model
+    // that actually answered (a fallback model if the first one declined).
+    JsonObject usage = doc["usage"];
+    credit_add_usage(doc["model"] | CLAUDE_MODEL, usage["input_tokens"] | 0L, usage["output_tokens"] | 0L,
+                     usage["cache_creation_input_tokens"] | 0L, usage["cache_read_input_tokens"] | 0L);
 
     const char *stop = doc["stop_reason"] | "";
     if (strcmp(stop, "refusal") == 0) return fail("Claude declined to answer that one.");

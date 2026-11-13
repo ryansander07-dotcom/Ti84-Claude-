@@ -91,7 +91,7 @@ def test_status_reports_the_bridge():
 
 
 def test_dongle_only_messages_get_an_error():
-    for msg in ["VIEW", "SNAP", "PHOTO", "PHOTO:part b", "SCAN", "WIFI:home\tsecret"]:
+    for msg in ["VIEW", "SNAP", "PHOTO", "PHOTO:part b", "SCAN", "WIFI:home\tsecret", "SAVED", "JOIN:home", "FORGET:home", "CREDIT", "CREDIT:4.95"]:
         reply = handle_line(msg + "\n", FakeClaude())
         assert reply[0].startswith("E:") and reply[-1] == "END", msg
         assert all(len(r) - 2 <= SCREEN_WIDTH for r in reply[:-1])

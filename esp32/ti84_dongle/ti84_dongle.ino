@@ -18,6 +18,7 @@
 #include "camera.h"
 #include "claude.h"
 #include "config.h"
+#include "credit.h"
 #include "wifi_store.h"
 
 USBCDC Calc;
@@ -51,9 +52,28 @@ static void send_error(const std::string &text) {
     send_line("END");
 }
 
+// Machine-readable credit line for the calculator's menu: K:<cents left>,<state>
+// with cents -1 when no balance has been entered, state 0 ok, 1 low, 2 empty, 3 not set.
+static void send_credit_code() {
+    CreditState st = credit_state();
+    long cents = st == CREDIT_UNKNOWN ? -1 : (long)(credit_left() * 100 + 0.5);
+    int code = st == CREDIT_OK ? 0 : st == CREDIT_LOW ? 1 : st == CREDIT_EMPTY ? 2 : 3;
+    send_line("K:" + std::to_string(cents) + "," + std::to_string(code));
+}
+
 static void reply_with_claude(const ClaudeReply &reply) {
     send_wrapped(reply.ok ? 'A' : 'E', reply.text);
+    CreditState st = credit_state();
+    if (st == CREDIT_LOW || st == CREDIT_EMPTY) {
+        send_line("S:");
+        send_wrapped('S', st == CREDIT_LOW ? "! " + credit_line() + " Add credit soon." : "! " + credit_line());
+    }
+    send_credit_code();
     send_line("END");
+}
+
+static std::string after(const std::string &line, size_t prefix) {
+    return line.size() > prefix ? line.substr(prefix) : "";
 }
 
 static void handle(const std::string &raw) {
@@ -120,6 +140,62 @@ static void handle(const std::string &raw) {
         return;
     }
 
+    if (line == "SAVED") {
+        // C: the network it's on now (blank if none), then W: each remembered one.
+        send_line("C:" + wifi_network());
+        for (const std::string &name : wifi_saved()) send_line("W:" + name);
+        send_line("END");
+        return;
+    }
+
+    if (line.rfind("JOIN:", 0) == 0) {
+        std::string ssid = after(line, 5);
+        if (!wifi_join_saved(ssid)) return send_error("Couldn't join " + ssid + ". If its password changed, forget it and add it again.");
+        send_wrapped('S', "Connected to " + ssid + ".");
+        send_line("END");
+        return;
+    }
+
+    if (line.rfind("FORGET:", 0) == 0) {
+        std::string ssid = after(line, 7);
+        if (!wifi_forget(ssid)) return send_error(ssid + " wasn't saved.");
+        send_wrapped('S', "Forgot " + ssid + ".");
+        send_line("END");
+        return;
+    }
+
+    if (line == "CREDIT") {
+        send_credit_code();
+        send_wrapped('S', credit_line());
+        if (credit_known() && credit_state() != CREDIT_EMPTY) send_line("S:(an estimate)");
+        if (credit_last() > 0) {
+            char buf[40];
+            snprintf(buf, sizeof buf, "Last answer: ~$%.3f", credit_last());
+            send_line(std::string("S:") + buf);
+        }
+        send_line("S:");
+        if (!credit_known())
+            send_wrapped('S', "Enter your balance from platform.claude.com (Billing) so the dongle can count down.");
+        else
+            send_wrapped('S', "After adding credit, enter the new balance.");
+        send_line("END");
+        return;
+    }
+
+    if (line.rfind("CREDIT:", 0) == 0) {
+        std::string amount = after(line, 7);
+        if (!amount.empty() && amount[0] == '$') amount = amount.substr(1);
+        char *end = nullptr;
+        double dollars = strtod(amount.c_str(), &end);
+        if (amount.empty() || *end != '\0' || dollars < 0 || dollars > 100000)
+            return send_error("Type the balance as a number, like 4.95.");
+        credit_set_balance(dollars);
+        send_credit_code();
+        send_wrapped('S', "Saved. " + credit_line());
+        send_line("END");
+        return;
+    }
+
     if (line == "STATUS") {
         if (wifi_connected()) {
             send_wrapped('S', "Wi-Fi: " + wifi_network());
@@ -130,6 +206,7 @@ static void handle(const std::string &raw) {
         send_line("S:Saved networks: " + std::to_string(wifi_saved_count()));
         send_line(std::string("S:Camera: ") + (camera_ok() ? "ready" : "not found"));
         send_line("S:Model: " CLAUDE_MODEL);
+        send_wrapped('S', credit_line());
         send_line("END");
         return;
     }
@@ -144,6 +221,7 @@ void setup() {
     Calc.begin();
     USB.begin();
 
+    credit_begin();
     Serial.printf("camera: %s\n", camera_begin() ? "ok" : "not found");
     wifi_begin();
 }

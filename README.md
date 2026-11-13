@@ -20,9 +20,18 @@ you only ever plug it into the calculator. Everything is done from the calculato
 - **Photo**: the calculator shows a live preview from the dongle's camera so you can
   aim it. Press Enter to take the picture; the dongle sends it to Claude and the
   answer comes back to the calculator.
-- **Wi-Fi**: pick a network and type its password on the calculator. The dongle saves
-  it and remembers it.
-- **Status**: shows whether the dongle is connected to Wi-Fi and to Claude.
+- **Wi-Fi**: shows which network the dongle is on. **Find networks** lists the ones in
+  range (saved ones marked `*`); pick one and type its password. **Type a name+password**
+  adds a network that doesn't show up (hidden networks). **Saved networks** lists the
+  ones it remembers: [enter] joins, [del] forgets. Every network you join is saved
+  (up to 10), and the dongle joins the strongest saved one in range by itself whenever
+  it isn't connected.
+- **Credit**: an estimate of the API credit left. The API doesn't tell an API key its
+  balance, so enter the balance from platform.claude.com (Billing) once; the dongle
+  subtracts each answer's cost from the tokens it used. The main menu warns when it's
+  under $1 (`CREDIT_LOW_USD` in `config.h`) or used up, and so does each answer. After
+  adding credit, enter the new balance.
+- **Status**: Wi-Fi, signal, camera, model and credit.
 
 One-time setup: put your API key (and, optionally, your home Wi-Fi) in
 `esp32/ti84_dongle/secrets.h`, then flash the dongle from your computer over USB-C (see
@@ -45,7 +54,7 @@ One-time setup: put your API key (and, optionally, your home Wi-Fi) in
 |---|---|---|
 | `bridge/` | Python program that stands in for the dongle on your computer, for testing | Ready to test |
 | `calculator/` | `CLAUDE` program for the calculator (CE C toolchain) | Compiles; not yet run on a calculator |
-| `esp32/ti84_dongle/` | Dongle firmware for the XIAO ESP32S3 Sense (Arduino) | Compiles; not yet run on the board |
+| `esp32/ti84_dongle/` | Dongle firmware (Arduino) for the Meshnology W11 or XIAO ESP32S3 Sense | Tested on the W11: questions, photos, Wi-Fi, credit |
 | `case/` | 3D-printable cases: an always-on battery door, a clip-on door with a magnetic pod, and a mini box without a camera | Door sizes need measuring |
 | `tests/` | Bridge tests, plus a check that the dongle's C++ text cleanup matches the Python one | |
 
@@ -183,17 +192,25 @@ message per line ending in `\n`, except preview frames, which carry raw pixel by
 | calculator to dongle | `PHOTO:<note>` | Same, with a note such as "just part b" |
 | calculator to dongle | `SCAN` | List nearby Wi-Fi networks |
 | calculator to dongle | `WIFI:<name>\t<password>` | Join a network and remember it |
+| calculator to dongle | `SAVED` | List remembered networks |
+| calculator to dongle | `JOIN:<name>` | Join a remembered network with its saved password |
+| calculator to dongle | `FORGET:<name>` | Forget a remembered network |
+| calculator to dongle | `CREDIT` | Report the credit estimate |
+| calculator to dongle | `CREDIT:<dollars>` | Set the current balance, such as `CREDIT:4.95` |
 | calculator to dongle | `STATUS` | Report Wi-Fi and Claude status |
 | dongle to calculator | `PONG` | Reply to `PING` |
 | dongle to calculator | `A:<line>` | One screen line of an answer (26 characters max) |
 | dongle to calculator | `E:<message>` | An error to show on screen |
 | dongle to calculator | `N:<network>` | One network from `SCAN` |
-| dongle to calculator | `S:<line>` | One status line from `STATUS`, `SNAP` or `WIFI` |
+| dongle to calculator | `S:<line>` | One status line from `STATUS`, `SNAP`, `WIFI`, `CREDIT` and others |
+| dongle to calculator | `C:<network>` | From `SAVED`: the network it's on now (blank if none) |
+| dongle to calculator | `W:<network>` | From `SAVED`: one remembered network |
+| dongle to calculator | `K:<cents>,<state>` | Credit estimate, sent with `CREDIT` and after every answer. Cents is -1 if no balance is set; state 0 ok, 1 low, 2 used up, 3 not set |
 | dongle to calculator | `F:<width>,<height>,<bytes>` | A preview frame; exactly `<bytes>` bytes of 8-bit grayscale pixels follow, then `END` |
 | dongle to calculator | `END` | The reply is complete |
 
 `PHOTO` replies may take 10-60 seconds while Claude reads the picture. The bridge
-answers `VIEW`, `SNAP`, `PHOTO`, `SCAN` and `WIFI` with an error, since your computer
+answers `VIEW`, `SNAP`, `PHOTO`, `SCAN`, `WIFI`, `SAVED`, `JOIN`, `FORGET` and `CREDIT` with an error, since your computer
 has no camera hooked up to the calculator.
 
 ## Running the tests

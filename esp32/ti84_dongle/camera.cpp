@@ -64,13 +64,23 @@ bool camera_begin() {
     s->set_hmirror(s, CAMERA_HMIRROR);
     current = FRAMESIZE_UXGA;
 
-    rgb = static_cast<uint8_t *>(ps_malloc(PREVIEW_W * 2 * PREVIEW_H * 2 * 3));
+    if (!rgb) rgb = static_cast<uint8_t *>(ps_malloc(PREVIEW_W * 2 * PREVIEW_H * 2 * 3));
     ready = rgb != nullptr;
     if (ready) use_size(FRAMESIZE_QVGA);
     return ready;
 }
 
-bool camera_ok() { return ready; }
+// If the camera wasn't found (say it was snapped on after the dongle started),
+// look for it again, at most every few seconds.
+bool camera_ok() {
+    static uint32_t last_try = 0;
+    if (!ready && millis() - last_try > 3000) {
+        last_try = millis();
+        esp_camera_deinit();
+        camera_begin();
+    }
+    return ready;
+}
 
 bool camera_preview(uint8_t *gray) {
     if (!ready) return false;

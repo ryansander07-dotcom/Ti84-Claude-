@@ -23,8 +23,12 @@
 #define CAMERA_VFLIP 0
 #define CAMERA_HMIRROR 0
 
-// How many Wi-Fi networks the dongle remembers.
-#define MAX_SAVED_NETWORKS 5
+// How many Wi-Fi networks the dongle remembers. It joins the strongest one in
+// range by itself whenever it isn't connected.
+#define MAX_SAVED_NETWORKS 10
+
+// Warn on the calculator when the estimated API credit drops below this many dollars.
+#define CREDIT_LOW_USD 1.00
 
 // Camera pins on the Seeed XIAO ESP32S3 Sense.
 #define CAM_PIN_PWDN -1

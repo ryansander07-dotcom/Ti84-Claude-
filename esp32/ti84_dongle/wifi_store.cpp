@@ -19,18 +19,20 @@ struct SavedNetwork {
 std::vector<SavedNetwork> saved;  // most recently added first
 SemaphoreHandle_t lock;
 Preferences prefs;
+bool skip_default = false;  // the secrets.h network was forgotten from the calculator
 
 void load() {
     saved.clear();
     prefs.begin("wifi", true);
     int n = prefs.getInt("count", 0);
+    skip_default = prefs.getBool("nodef", false);
     for (int i = 0; i < n && i < MAX_SAVED_NETWORKS; i++) {
         String s = prefs.getString(("s" + String(i)).c_str(), "");
         String p = prefs.getString(("p" + String(i)).c_str(), "");
         if (s.length()) saved.push_back({s.c_str(), p.c_str()});
     }
     prefs.end();
-    if (strlen(WIFI_SSID) > 0) {
+    if (strlen(WIFI_SSID) > 0 && !skip_default) {
         bool known = std::any_of(saved.begin(), saved.end(), [](const SavedNetwork &n) { return n.ssid == WIFI_SSID; });
         if (!known) saved.push_back({WIFI_SSID, WIFI_PASSWORD});
     }
@@ -40,6 +42,7 @@ void store() {
     prefs.begin("wifi", false);
     prefs.clear();
     prefs.putInt("count", saved.size());
+    prefs.putBool("nodef", skip_default);
     for (size_t i = 0; i < saved.size(); i++) {
         prefs.putString(("s" + String(i)).c_str(), saved[i].ssid.c_str());
         prefs.putString(("p" + String(i)).c_str(), saved[i].password.c_str());
@@ -127,6 +130,42 @@ std::vector<std::string> wifi_scan() {
     return names;
 }
 
+std::vector<std::string> wifi_saved() {
+    std::vector<std::string> names;
+    if (xSemaphoreTake(lock, pdMS_TO_TICKS(30000)) != pdTRUE) return names;
+    for (const SavedNetwork &n : saved) names.push_back(n.ssid);
+    xSemaphoreGive(lock);
+    return names;
+}
+
+bool wifi_join_saved(const std::string &ssid) {
+    std::string password;
+    bool found = false;
+    if (xSemaphoreTake(lock, pdMS_TO_TICKS(30000)) != pdTRUE) return false;
+    for (const SavedNetwork &n : saved)
+        if (n.ssid == ssid) password = n.password, found = true;
+    xSemaphoreGive(lock);
+    return found && wifi_join(ssid, password);
+}
+
+bool wifi_forget(const std::string &ssid) {
+    if (xSemaphoreTake(lock, pdMS_TO_TICKS(30000)) != pdTRUE) return false;
+    size_t before = saved.size();
+    saved.erase(std::remove_if(saved.begin(), saved.end(), [&](const SavedNetwork &n) { return n.ssid == ssid; }),
+                saved.end());
+    bool removed = saved.size() != before;
+    if (removed) {
+        if (ssid == WIFI_SSID) skip_default = true;
+        store();
+        if (WiFi.status() == WL_CONNECTED && WiFi.SSID().c_str() == ssid) {
+            WiFi.disconnect();
+            connect_best();  // move to another remembered network, if one is in range
+        }
+    }
+    xSemaphoreGive(lock);
+    return removed;
+}
+
 bool wifi_join(const std::string &ssid, const std::string &password) {
     if (xSemaphoreTake(lock, pdMS_TO_TICKS(30000)) != pdTRUE) return false;
     bool ok = connect_to(ssid, password, 15000);
@@ -134,6 +173,7 @@ bool wifi_join(const std::string &ssid, const std::string &password) {
         saved.erase(std::remove_if(saved.begin(), saved.end(), [&](const SavedNetwork &n) { return n.ssid == ssid; }),
                     saved.end());
         saved.insert(saved.begin(), {ssid, password});
+        if (ssid == WIFI_SSID) skip_default = false;
         if (saved.size() > MAX_SAVED_NETWORKS) saved.resize(MAX_SAVED_NETWORKS);
         store();
     } else {

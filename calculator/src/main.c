@@ -1,7 +1,7 @@
 /* TI-84 Plus CE program for the Claude dongle.
  *
  * Menus: ask a question, photograph a problem with the dongle's camera,
- * join Wi-Fi, and check status. Talks the line protocol in the README over
+ * join and manage Wi-Fi, see the API credit estimate, and check status. Talks the line protocol in the README over
  * USB, so it also works with bridge.py on a computer for testing.
  */
 #include <graphx.h>
@@ -23,6 +23,7 @@
 #define MAX_LINES 300
 #define MAX_INPUT 500
 #define MAX_NETWORKS 20
+#define NAME_LEN 32 /* longest Wi-Fi name */
 
 #define PREVIEW_W 160
 #define PREVIEW_H 120
@@ -31,9 +32,15 @@
 #define SLOW_TIMEOUT 200
 #define QUICK_TIMEOUT 10
 
-static char lines[MAX_LINES][COLS + 1];
+/* Room for a full Wi-Fi name; the screen shows the first COLS characters. */
+static char lines[MAX_LINES][NAME_LEN + 1];
 static int line_count;
-static char line_kind[MAX_LINES]; /* 'A', 'E', 'S' or 'N' */
+static char line_kind[MAX_LINES]; /* 'A', 'E', 'S', 'N', 'W' or 'C' */
+
+/* Last credit report from the dongle: cents left (-1 unknown) and
+   0 ok, 1 low, 2 empty, 3 not set, -1 not asked yet. */
+static long credit_cents = -1;
+static int credit_code = -1;
 
 static char input[MAX_INPUT + 1];
 static char message[MAX_INPUT + 16];
@@ -201,12 +208,13 @@ static bool require_link(void) {
     return false;
 }
 
-/* Send a request and collect A:/E:/S:/N: lines until END. Returns false if the
-   user cancelled or the link failed (an explanation is already in `lines`). */
+/* Send a request and collect its reply lines until END. Returns false if the
+   user cancelled or the link failed (an explanation is already in `lines`).
+   With waiting == NULL nothing is drawn (for quick background checks). */
 static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
     line_count = 0;
-    if (!require_link()) return false;
-    show_message(waiting, "clear: cancel");
+    if (waiting ? !require_link() : !link_ready()) return false;
+    if (waiting) show_message(waiting, "clear: cancel");
     if (!link_send(msg)) {
         strcpy(lines[0], "Couldn't send. Is the");
         strcpy(lines[1], "dongle plugged in?");
@@ -226,10 +234,12 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
                 line_count = 1;
                 return false;
             }
-            char row[COLS + 1];
-            dots = (dots + 1) % 4;
-            snprintf(row, sizeof row, "%.*s", dots + 1, "....");
-            put_row(1, row);
+            if (waiting) {
+                char row[COLS + 1];
+                dots = (dots + 1) % 4;
+                snprintf(row, sizeof row, "%.*s", dots + 1, "....");
+                put_row(1, row);
+            }
             continue;
         }
         if (n == LINK_CANCELLED) {
@@ -245,10 +255,20 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
             return false;
         }
         if (strcmp(reply, "END") == 0) return true;
+        if (n >= 2 && reply[0] == 'K' && reply[1] == ':') {
+            /* K:<cents>,<state>: the credit estimate, not shown as a line */
+            long cents;
+            int code;
+            if (sscanf(reply + 2, "%ld,%d", &cents, &code) == 2) {
+                credit_cents = cents;
+                credit_code = code;
+            }
+            continue;
+        }
         if (n >= 2 && reply[1] == ':' && line_count < MAX_LINES) {
             line_kind[line_count] = reply[0];
-            strncpy(lines[line_count], reply + 2, COLS);
-            lines[line_count][COLS] = '\0';
+            strncpy(lines[line_count], reply + 2, NAME_LEN);
+            lines[line_count][NAME_LEN] = '\0';
             line_count++;
         }
     }
@@ -397,55 +417,64 @@ static void photo(void) {
     show_lines();
 }
 
-static void wifi(void) {
-    if (!request("SCAN", "Looking for Wi-Fi...", 40)) {
-        show_lines();
-        return;
-    }
-    char names[MAX_NETWORKS + 1][33];
-    int count = 0;
-    for (int i = 0; i < line_count && count < MAX_NETWORKS; i++) {
-        if (line_kind[i] != 'N') continue;
-        strncpy(names[count], lines[i], 32);
-        names[count][32] = '\0';
-        count++;
-    }
-    if (count == 0) {
-        show_lines();
-        return;
-    }
-    strcpy(names[count++], "(type a name)");
+/* ---------- Wi-Fi ---------- */
 
+static char saved_names[MAX_NETWORKS][NAME_LEN + 1];
+static int saved_count;
+static char current_net[NAME_LEN + 1];
+
+/* Ask the dongle which networks it remembers and which one it's on. */
+static void load_saved(void) {
+    saved_count = 0;
+    current_net[0] = '\0';
+    if (!request("SAVED", NULL, QUICK_TIMEOUT)) return;
+    for (int i = 0; i < line_count; i++) {
+        if (line_kind[i] == 'C') strcpy(current_net, lines[i]);
+        if (line_kind[i] == 'W' && saved_count < MAX_NETWORKS) strcpy(saved_names[saved_count++], lines[i]);
+    }
+}
+
+static bool is_saved(const char *name) {
+    for (int i = 0; i < saved_count; i++)
+        if (strcmp(saved_names[i], name) == 0) return true;
+    return false;
+}
+
+/* A scrolling list. Returns the chosen index, or -1 for [clear]. The key that
+   chose it ([enter] or [del]) goes in *key. `mark` puts a star before items. */
+static int pick(const char *title, char items[][NAME_LEN + 1], int count, const char *hint,
+                bool (*mark)(const char *), uint8_t *key) {
     int sel = 0, top = 0;
     for (;;) {
-        put_row(0, "Pick a network:");
+        clear_screen();
+        put_row(0, title);
         for (uint8_t r = 0; r < BODY_ROWS - 1; r++) {
             int i = top + r;
             char row[COLS + 1] = "";
-            if (i < count) snprintf(row, sizeof row, "%c%s", i == sel ? '>' : ' ', names[i]);
+            if (i < count)
+                snprintf(row, sizeof row, "%c%c%s", i == sel ? '>' : ' ', mark && mark(items[i]) ? '*' : ' ', items[i]);
             put_row(r + 1, row);
         }
-        put_row(ROWS - 1, "enter: pick  clear: back");
+        put_row(ROWS - 1, hint);
         uint8_t k;
         do {
             link_poll();
             k = os_GetCSC();
         } while (!k);
-        if (k == sk_Clear) return;
+        if (k == sk_Clear) return -1;
         if (k == sk_Down && sel < count - 1) sel++;
         if (k == sk_Up && sel > 0) sel--;
         if (sel < top) top = sel;
         if (sel >= top + BODY_ROWS - 1) top = sel - (BODY_ROWS - 2);
-        if (k == sk_Enter) break;
+        if (k == sk_Enter || k == sk_Del) {
+            *key = k;
+            return sel;
+        }
     }
+}
 
-    char ssid[33];
-    if (sel == count - 1) {
-        if (!get_text("Network name:", MODE_LOWER, 32)) return;
-        strcpy(ssid, input);
-    } else {
-        strcpy(ssid, names[sel]);
-    }
+/* Ask for the password, then join and remember the network. */
+static void join_new(const char *ssid) {
     char prompt[COLS + 1];
     snprintf(prompt, sizeof prompt, "Password for %s", ssid);
     /* [clear] on an empty password means an open network. */
@@ -455,19 +484,143 @@ static void wifi(void) {
     show_lines();
 }
 
+static void join_saved(const char *ssid) {
+    snprintf(message, sizeof message, "JOIN:%s", ssid);
+    request(message, "Joining...", 40);
+    show_lines();
+}
+
+static void find_networks(void) {
+    if (!request("SCAN", "Looking for Wi-Fi...", 40)) {
+        show_lines();
+        return;
+    }
+    static char found[MAX_NETWORKS][NAME_LEN + 1];
+    int count = 0;
+    for (int i = 0; i < line_count && count < MAX_NETWORKS; i++)
+        if (line_kind[i] == 'N') strcpy(found[count++], lines[i]);
+    if (count == 0) {
+        show_lines();
+        return;
+    }
+    uint8_t key;
+    int sel = pick("Pick one (*=saved):", found, count, "enter: join  clear: back", is_saved, &key);
+    if (sel < 0 || key != sk_Enter) return;
+    if (is_saved(found[sel])) join_saved(found[sel]);
+    else join_new(found[sel]);
+}
+
+static void type_network(void) {
+    if (!get_text("Network name:", MODE_LOWER, NAME_LEN)) return;
+    char ssid[NAME_LEN + 1];
+    strcpy(ssid, input);
+    join_new(ssid);
+}
+
+static void saved_networks(void) {
+    for (;;) {
+        load_saved();
+        if (saved_count == 0) {
+            show_message("No saved networks yet.", "enter: back");
+            put_row(2, "Join one and it's saved.");
+            wait_for_key();
+            return;
+        }
+        uint8_t key;
+        int sel = pick("Saved networks:", saved_names, saved_count, "enter=join del=forget", NULL, &key);
+        if (sel < 0) return;
+        if (key == sk_Enter) {
+            join_saved(saved_names[sel]);
+            return;
+        }
+        snprintf(message, sizeof message, "FORGET:%s", saved_names[sel]);
+        request(message, "Forgetting...", QUICK_TIMEOUT);
+        show_lines();
+    }
+}
+
+static void wifi(void) {
+    if (!require_link()) return;
+    for (;;) {
+        load_saved();
+        clear_screen();
+        put_row(0, "Wi-Fi");
+        char row[COLS + 1];
+        if (current_net[0]) snprintf(row, sizeof row, "On: %s", current_net);
+        else snprintf(row, sizeof row, "Not connected");
+        put_row(1, row);
+        put_row(3, "1: Find networks");
+        put_row(4, "2: Type a name+password");
+        snprintf(row, sizeof row, "3: Saved networks (%d)", saved_count);
+        put_row(5, row);
+        put_row(7, "Saved ones join by");
+        put_row(8, "themselves when in range.");
+        put_row(ROWS - 1, "clear: back");
+        uint8_t k;
+        do {
+            link_poll();
+            k = os_GetCSC();
+        } while (!k);
+        if (k == sk_Clear) return;
+        if (k == sk_1) find_networks();
+        else if (k == sk_2) type_network();
+        else if (k == sk_3) saved_networks();
+        if (!link_ready()) return;
+    }
+}
+
+/* ---------- credit ---------- */
+
+static void credit(void) {
+    for (;;) {
+        if (!request("CREDIT", "Checking...", QUICK_TIMEOUT)) {
+            show_lines();
+            return;
+        }
+        clear_screen();
+        for (int i = 0; i < line_count && i < BODY_ROWS - 2; i++) put_row((uint8_t)i, lines[i]);
+        put_row(BODY_ROWS - 1, "1: Enter my balance");
+        put_row(ROWS - 1, "clear: back");
+        uint8_t k;
+        do {
+            link_poll();
+            k = os_GetCSC();
+        } while (!k);
+        if (k != sk_1) return;
+        if (!get_text("Balance in $ (like 4.95)", MODE_MATH, 10)) continue;
+        snprintf(message, sizeof message, "CREDIT:%s", input);
+        request(message, "Saving...", QUICK_TIMEOUT);
+        show_lines();
+    }
+}
+
 static void status(void) {
     request("STATUS", "Checking...", QUICK_TIMEOUT);
     show_lines();
 }
 
+static void credit_note(char *row, size_t size) {
+    row[0] = '\0';
+    if (credit_code == 1)
+        snprintf(row, size, "! Credit low: ~$%ld.%02ld", credit_cents / 100, credit_cents % 100);
+    else if (credit_code == 2)
+        snprintf(row, size, "! Out of API credit");
+    else if (credit_code == 3)
+        snprintf(row, size, "Set your credit: press 4");
+}
+
 static void draw_menu(void) {
     clear_screen();
     put_row(0, "TI-84 Claude");
-    put_row(2, "1: Ask a question");
-    put_row(3, "2: Photo of a problem");
-    put_row(4, "3: Wi-Fi");
-    put_row(5, "4: Status");
+    put_row(1, "1: Ask a question");
+    put_row(2, "2: Photo of a problem");
+    put_row(3, "3: Wi-Fi");
+    put_row(4, "4: Credit");
+    put_row(5, "5: Status");
     put_row(7, link_ready() ? "Dongle: connected" : "Dongle: not plugged in");
+    char row[COLS + 1];
+    credit_note(row, sizeof row);
+    put_row(8, row);
     put_row(ROWS - 1, "clear: quit");
 }
 
@@ -483,6 +636,7 @@ int main(void) {
     for (;;) {
         if (link_ready() != was_ready) {
             was_ready = link_ready();
+            if (was_ready) request("CREDIT", NULL, QUICK_TIMEOUT); /* for the warning line */
             draw_menu();
         }
         link_poll();
@@ -492,7 +646,8 @@ int main(void) {
         if (k == sk_1) ask_question();
         else if (k == sk_2) photo();
         else if (k == sk_3) wifi();
-        else if (k == sk_4) status();
+        else if (k == sk_4) credit();
+        else if (k == sk_5) status();
         else acted = false;
         if (acted) draw_menu();
     }

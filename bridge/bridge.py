@@ -32,7 +32,7 @@ from claude_client import Claude, ClaudeError
 MAX_QUESTION = 500
 
 # Messages only the dongle can answer (camera and Wi-Fi setup).
-DONGLE_ONLY = {"VIEW", "SNAP", "PHOTO", "SCAN"}
+DONGLE_ONLY = {"VIEW", "SNAP", "PHOTO", "SCAN", "SAVED", "CREDIT"}
 
 
 def handle_line(line: str, claude: Claude, width: int = SCREEN_WIDTH) -> list[str]:
@@ -43,7 +43,7 @@ def handle_line(line: str, claude: Claude, width: int = SCREEN_WIDTH) -> list[st
     if line == "STATUS":
         return [f"S:{text}" for text in to_screen_lines(
             f"Connected to the bridge on your computer. Model: {claude.model}", width)] + ["END"]
-    if line in DONGLE_ONLY or line.startswith(("PHOTO:", "WIFI:")):
+    if line in DONGLE_ONLY or line.startswith(("PHOTO:", "WIFI:", "JOIN:", "FORGET:", "CREDIT:")):
         return ["E:Only the dongle can do", "E:that. The bridge has no", "E:camera or Wi-Fi setup.", "END"]
     if not line.startswith("Q:"):
         return ["E:Unknown message.", "END"]
