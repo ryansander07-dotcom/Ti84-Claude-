@@ -65,6 +65,11 @@ sizes. If something doesn't fit, the script stops and says what's too big.
 
 ## Print
 
+**Bambu Lab printers:** send `case/mini_box.3mf` with `case/mini_box_print_notes.txt`.
+The 3MF has both mini-box parts on one plate, ready to slice in Bambu Studio. Rebuild it
+after changing the case with `.venv/bin/python case/make_3mf.py`.
+
+
 Print **`stl/fit_test.stl` first**: it's just the door plate (about 10 minutes). It should
 drop into the recess with the screw lined up. Adjust and reprint until it fits.
 
