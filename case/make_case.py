@@ -38,19 +38,30 @@ from pathlib import Path
 import numpy as np
 from manifold3d import CrossSection, Manifold
 
-# ---- measure these on your calculator's battery door ------------------------
-DOOR_WIDTH = 62.0         # across the calculator (X)
-DOOR_LENGTH = 52.0        # along the calculator (Y)
-DOOR_THICKNESS = 1.6      # the flat part of the door; keeps the door flush
-DOOR_CORNER_RADIUS = 2.0
+# ---- the TI-84 Plus CE battery door ------------------------------------------
+# Measured from a straight-on iFixit photo, scaled by the calculator's published
+# 86.9 mm (3.42 in) width, so expect up to about 1 mm of error. Check with
+# calipers or the fit test before printing a full case.
+DOOR_WIDTH = 63.4         # across the calculator (X)
+DOOR_LENGTH = 60.4        # along the calculator (Y)
+DOOR_THICKNESS = 1.6      # the flat part of the door; keeps the door flush (estimate)
+DOOR_CORNER_RADIUS = 3.8
 EDGE_MARGIN = 1.0         # the cover stays this far inside the door edge
-TAB_WIDTH = 20.0          # tongue on the top edge that slides under the case
-TAB_LENGTH = 3.0          # how far it sticks out past the door edge
+# Two captive Phillips screws at the top corners (the screen end).
+SCREW_INSET = 6.6         # screw centers from the left and right edges
+SCREW_FROM_TOP = 5.5      # screw centers from the top edge
+SCREW_HOLE = 2.2          # fits the original screws
+SCREW_HEAD = 4.6          # counterbore for the screw heads
+# The bottom edge tucks under the case; the door lifts out from the screw end.
+TAB_WIDTH = 20.0
+TAB_LENGTH = 2.0          # how far the tongue sticks out past the bottom edge
 TAB_THICKNESS = 0.9
-SCREW_FROM_BOTTOM = 4.0   # center of the screw hole, measured from the bottom edge
-SCREW_X = 0.0             # 0 = centered left to right
-SCREW_HOLE = 2.2          # fits the original screw
-SCREW_HEAD = 4.6          # counterbore for the screw head
+# The calculator's two rubber feet sit in recesses near the door's bottom corners.
+FOOT_DIAMETER = 7.2
+FOOT_INSET = 6.3          # foot centers from the left and right edges
+FOOT_FROM_BOTTOM = 7.8    # foot centers from the bottom edge
+FOOT_RECESS = 0.8         # recess depth in the door
+FOOT_HEIGHT = 2.0         # how far a foot stands up; the pod clears this
 
 # ---- the XIAO ESP32S3 Sense, camera unfolded beside it -------------------------
 BOARD_WIDTH = 17.8        # X
@@ -85,7 +96,7 @@ MAGNET_FIT = 0.15         # extra room in each pocket; a drop of glue holds them
 BOSS_DIAMETER = 9.0       # bosses on the door that locate the pod
 BOSS_HEIGHT = 1.4
 BOSS_FIT = 0.2
-MAGNET_INSET = 7.0        # boss centers from the cover's edges
+MAGNET_INSET = 6.5        # boss centers from the cover's edges
 
 # ---- mini: plain XIAO ESP32S3, no camera ------------------------------------------
 MINI_BOARD_HEIGHT = 4.5   # board plus the USB-C port and shield on top
@@ -154,15 +165,21 @@ def print_top_down(part, height):
 
 # ---- the door plate -----------------------------------------------------------
 
-SCREW_Y = -DOOR_LENGTH / 2 + SCREW_FROM_BOTTOM
+SCREW_Y = DOOR_LENGTH / 2 - SCREW_FROM_TOP
+SCREWS = [(-DOOR_WIDTH / 2 + SCREW_INSET, SCREW_Y), (DOOR_WIDTH / 2 - SCREW_INSET, SCREW_Y)]
+FOOT_Y = -DOOR_LENGTH / 2 + FOOT_FROM_BOTTOM
+FEET = [(-DOOR_WIDTH / 2 + FOOT_INSET, FOOT_Y), (DOOR_WIDTH / 2 - FOOT_INSET, FOOT_Y)]
 
 
 def door_plate():
     plate = box(DOOR_WIDTH, DOOR_LENGTH, DOOR_THICKNESS, DOOR_CORNER_RADIUS)
-    tab = cube(-TAB_WIDTH / 2, TAB_WIDTH / 2, DOOR_LENGTH / 2 - 1, DOOR_LENGTH / 2 + TAB_LENGTH, 0, TAB_THICKNESS)
-    hole = cylinder(SCREW_HOLE, -1, DOOR_THICKNESS + 1, SCREW_X, SCREW_Y)
-    head = cylinder(SCREW_HEAD, DOOR_THICKNESS / 2, DOOR_THICKNESS + 1, SCREW_X, SCREW_Y)
-    return plate + tab - hole - head
+    plate += cube(-TAB_WIDTH / 2, TAB_WIDTH / 2, -DOOR_LENGTH / 2 - TAB_LENGTH, -DOOR_LENGTH / 2 + 1, 0, TAB_THICKNESS)
+    for x, y in SCREWS:
+        plate -= cylinder(SCREW_HOLE, -1, DOOR_THICKNESS + 1, x, y)
+        plate -= cylinder(SCREW_HEAD, DOOR_THICKNESS / 2, DOOR_THICKNESS + 1, x, y)
+    for x, y in FEET:
+        plate -= cylinder(FOOT_DIAMETER + 0.3, DOOR_THICKNESS - FOOT_RECESS, DOOR_THICKNESS + 1, x, y)
+    return plate
 
 
 # ---- what goes inside the door cover ----------------------------------------------
@@ -183,15 +200,19 @@ GAP = 2.0
 GROUP_W = XIAO_W + GAP + BATT_W
 XIAO_X0 = -GROUP_W / 2
 XIAO_CX = XIAO_X0 + XIAO_W / 2
-XIAO_CY = INNER_L / 2 - LIP_WALL - XIAO_L / 2
+PARTS_TOP_Y = min(INNER_L / 2 - LIP_WALL, SCREW_Y - SCREW_HEAD / 2 - 0.8)
+XIAO_CY = PARTS_TOP_Y - XIAO_L / 2
 CAM_CX = XIAO_CX
 CAM_CY = XIAO_CY - XIAO_L / 2 - CAMERA_GAP - CAMERA_SIZE / 2
 BATT_CX = XIAO_X0 + XIAO_W + GAP + BATT_W / 2
-BATT_CY = INNER_L / 2 - LIP_WALL - BATT_L / 2
+BATT_CY = PARTS_TOP_Y - BATT_L / 2
 
 
-def usb_cut(z0, z1, inner_l, outer_l, cx):
-    return cube(cx - USB_OPENING_WIDTH / 2, cx + USB_OPENING_WIDTH / 2, inner_l / 2 - 3, outer_l / 2 + 1, z0, z1)
+def usb_cut(z0, z1, inner_l, outer_l, cx, reach=3.0):
+    return cube(cx - USB_OPENING_WIDTH / 2, cx + USB_OPENING_WIDTH / 2, inner_l / 2 - reach, outer_l / 2 + 1, z0, z1)
+
+
+USB_REACH = INNER_L / 2 - PARTS_TOP_Y + 1.0  # the plug reaches in past the screw heads
 
 
 def cover():
@@ -200,7 +221,7 @@ def cover():
     c -= cylinder(LENS_WINDOW, -1, COVER_H + 1, CAM_CX, CAM_CY)
     c -= cylinder(LENS_RING, COVER_H - 0.6, COVER_H + 1, CAM_CX, CAM_CY)
     # USB-C opening in the top wall, up the height of the board stack.
-    c -= usb_cut(-1, min(STACK_HEIGHT, INNER_H - 1), INNER_L, COVER_L, XIAO_CX)
+    c -= usb_cut(-1, min(STACK_HEIGHT, INNER_H - 1), INNER_L, COVER_L, XIAO_CX)  # through the wall only
     # Vent slots over the XIAO; Wi-Fi makes it warm.
     for i in range(3):
         x = XIAO_CX - 4 + i * 4
@@ -220,14 +241,17 @@ def corner_ribs(cx, cy, w, l):
 
 def inside_features():
     """Rim, low ribs around the XIAO and battery, and the camera pedestal."""
-    r = rim(INNER_W, INNER_L, COVER_RADIUS) - usb_cut(-1, LIP_HEIGHT + 1, INNER_L, COVER_L, XIAO_CX)
+    r = rim(INNER_W, INNER_L, COVER_RADIUS) - usb_cut(-1, LIP_HEIGHT + 1, INNER_L, COVER_L, XIAO_CX, USB_REACH)
     ribs = corner_ribs(XIAO_CX, XIAO_CY, XIAO_W, XIAO_L) + corner_ribs(BATT_CX, BATT_CY, BATT_W, BATT_L)
     # The camera sits on a pedestal so the lens reaches the window, in a shallow pocket.
     pedestal_h = INNER_H - CAMERA_HEIGHT - 0.2
     pocket = CAMERA_SIZE + 0.4
     pedestal = box(pocket + 2.4, pocket + 2.4, pedestal_h + 1.0, 0.8)
     pedestal -= box(pocket, pocket, 2, 0.3).translate((0, 0, pedestal_h))
-    return r + ribs + pedestal.translate((CAM_CX, CAM_CY, 0))
+    features = r + ribs + pedestal.translate((CAM_CX, CAM_CY, 0))
+    for x, y in SCREWS:  # keep the screw heads reachable with a screwdriver
+        features -= cylinder(SCREW_HEAD + 1.5, -1, INNER_H, x, y)
+    return features
 
 
 # ---- always-on door ----------------------------------------------------------------
@@ -245,9 +269,9 @@ POD_FLOOR = SOCKET_DEPTH + MAGNET_DEPTH + 0.6
 
 
 def magnet_spots():
-    xs = (-COVER_W / 2 + MAGNET_INSET, COVER_W / 2 - MAGNET_INSET)
-    ys = (-COVER_L / 2 + MAGNET_INSET, COVER_L / 2 - MAGNET_INSET)
-    return [(x, y) for x in xs for y in ys]
+    # Middle of each edge: the corners are taken by the screws (top) and feet (bottom).
+    return [(0, COVER_L / 2 - MAGNET_INSET), (0, -COVER_L / 2 + MAGNET_INSET),
+            (-COVER_W / 2 + MAGNET_INSET, 0), (COVER_W / 2 - MAGNET_INSET, 0)]
 
 
 def clip_door():
@@ -266,6 +290,10 @@ def pod_base():
     for x, y in magnet_spots():
         floor -= cylinder(BOSS_DIAMETER + 2 * BOSS_FIT, -1, SOCKET_DEPTH, x, y)
         floor -= cylinder(MAGNET_POCKET, SOCKET_DEPTH - 0.01, SOCKET_DEPTH + MAGNET_DEPTH, x, y)
+    for x, y in FEET:
+        floor -= cylinder(FOOT_DIAMETER + 1.0, -1, FOOT_HEIGHT - FOOT_RECESS + 0.4, x, y)
+    for x, y in SCREWS:
+        floor -= cylinder(SCREW_HEAD + 1.0, -1, 1.0, x, y)
     return floor + inside_features().translate((0, 0, POD_FLOOR))
 
 
@@ -308,12 +336,17 @@ def check_fit():
     if GROUP_W > room_w:
         problems.append(f"the XIAO and battery need {GROUP_W:.1f} mm across, the cover has {room_w:.1f} mm")
     need_l = max(XIAO_L + CAMERA_GAP + CAMERA_SIZE + 1.2, BATT_L)
-    room_l = INNER_L - 2 * LIP_WALL
+    room_l = PARTS_TOP_Y + INNER_L / 2 - LIP_WALL
     if need_l > room_l:
         problems.append(f"the parts need {need_l:.1f} mm of length, the cover has {room_l:.1f} mm")
     for x, y in magnet_spots():
-        if (x - SCREW_X) ** 2 + (y - SCREW_Y) ** 2 < ((BOSS_DIAMETER + SCREW_HEAD) / 2 + 1) ** 2:
-            problems.append("a magnet boss would cover the screw; change MAGNET_INSET")
+        for sx, sy in SCREWS + FEET:
+            if (x - sx) ** 2 + (y - sy) ** 2 < ((BOSS_DIAMETER + FOOT_DIAMETER) / 2 + 1) ** 2:
+                problems.append("a magnet boss would hit a screw or foot; change MAGNET_INSET")
+    for fx, fy in FEET:
+        if fy + FOOT_DIAMETER / 2 + 1.5 > min(CAM_CY - CAMERA_SIZE / 2 - 1.2, BATT_CY - BATT_L / 2) and \
+                (abs(fx - BATT_CX) < BATT_W / 2 + 4 or abs(fx - CAM_CX) < CAMERA_SIZE / 2 + 4):
+            problems.append("the parts reach down over a rubber foot")
     if problems:
         raise SystemExit("Doesn't fit: " + "; ".join(problems) +
                          ". Check the DOOR_ measurements, or pick a smaller battery.")

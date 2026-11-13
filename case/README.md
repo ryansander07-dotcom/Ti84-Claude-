@@ -30,30 +30,36 @@ The XIAO charges the battery whenever the calculator powers it, so you never cha
 dongle separately. That charging comes out of the calculator's battery. The mini has
 no battery; the calculator powers it directly.
 
-## Measure first
+## The door's measurements
 
-These values in `make_case.py` are estimates. Nobody publishes exact dimensions for
-the TI-84 Plus CE's battery door. Take the original door off (Phillips #00 screw) and
-measure with calipers:
+No one publishes the TI-84 Plus CE battery door's dimensions, so these were measured
+from a straight-on photo in [iFixit's battery guide](https://www.ifixit.com/Guide/Texas+Instruments+TI-84+Plus+CE+Battery+Replacement/63973),
+using the calculator's published 86.9 mm (3.42 in) width as the ruler. Expect up to
+about 1 mm of error.
 
-| Setting | What to measure |
-|---|---|
-| `DOOR_WIDTH`, `DOOR_LENGTH` | The door, edge to edge, not counting tabs |
-| `DOOR_THICKNESS` | The flat part of the door |
-| `TAB_WIDTH`, `TAB_LENGTH`, `TAB_THICKNESS` | The tongue that slides under the case at the top edge |
-| `SCREW_FROM_BOTTOM`, `SCREW_X` | Where the screw hole's center is |
-| `STACK_HEIGHT` | XIAO Sense with the camera unfolded: the board plus expansion board |
-| `CAMERA_SIZE`, `CAMERA_HEIGHT`, `CAMERA_GAP` | The camera module, and how far its ribbon lets it sit from the board |
-| `MINI_BOARD_HEIGHT` | The plain XIAO, bottom of the board to the top of the USB-C port |
+| Setting | Value | What it is |
+|---|---|---|
+| `DOOR_WIDTH` × `DOOR_LENGTH` | 63.4 × 60.4 mm | The door, edge to edge |
+| `DOOR_CORNER_RADIUS` | 3.8 mm | |
+| `SCREW_INSET`, `SCREW_FROM_TOP` | 6.6 mm, 5.5 mm | Two captive Phillips screws at the top (screen-end) corners, about 50 mm apart |
+| `FOOT_INSET`, `FOOT_FROM_BOTTOM`, `FOOT_DIAMETER` | 6.3, 7.8, 7.2 mm | The calculator's two rubber feet sit in the door's bottom corners |
+| `DOOR_THICKNESS` | 1.6 mm | **Guess**; measure it |
+| `TAB_*` | 2 mm tongue | **Guess**: the bottom edge tucks under the case, since the door lifts out from the screw end |
 
-Then rebuild:
+The two screws are captive: they stay in the original door. Unscrew both, then work
+them out of the old door to use in the new one. The rubber feet peel off and stick into
+the new door's recesses (on the clip-on door; the always-on cover goes over them).
+
+If you have calipers, measure the original door and correct these, especially the
+thickness and the bottom tongue. Then rebuild:
 
 ```bash
 .venv/bin/python case/make_case.py
 ```
 
-If something doesn't fit, the script stops and says what's too big. If your door has
-clips the script doesn't model, a photo of the inside of the door is enough to add them.
+The XIAO sizes are estimates too. Once you have the board, check `STACK_HEIGHT` (the
+board plus the expansion board, with the camera unfolded) and the camera module
+sizes. If something doesn't fit, the script stops and says what's too big.
 
 ## Print
 
@@ -83,13 +89,12 @@ better in a hot car or backpack. White or light gray matches the calculator's ba
    `CAMERA_GAP` and reprint the base.
 
 **Always-on:** swap the base onto the calculator in place of the battery door and put
-the original screw back in before pressing the cover on (the screw sits under the
-cover).
+the two screws in before pressing the cover on (the screws sit under the cover).
 
 **Clip-on:**
 
-1. Glue a magnet into each of the four bosses on the door and each of the four pockets
-   under the pod. Before the glue sets, stack each door magnet on its matching pod
+1. Glue a magnet into each of the four bosses on the door (one in the middle of each
+   edge) and each of the four pockets under the pod. Before the glue sets, stack each door magnet on its matching pod
    magnet so they attract: mark the facing sides with a marker and keep the marks up.
 2. Screw the door on in place of the battery door. It stays.
 3. Set the pod on the door. The bosses line it up and the magnets snap it down. To take
