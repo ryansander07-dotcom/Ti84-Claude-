@@ -114,15 +114,16 @@ the two screws in before pressing the cover on (the screws sit under the cover).
    it off, lift it straight up.
 
 **Mini (no camera):** it holds the Meshnology W11 main board with the camera board left
-off, and has a power switch on the side (an SS12D00-style mini slide switch).
+off. The USB cable comes out of one long side and the power switch (an SS12D00-style
+mini slide switch) is on the other.
 1. Wire the battery through the switch: battery black to **B−** on the board, battery red
    to one outer pin of the switch, and the switch's middle pin to **B+**. Do one wire at a
    time so bare ends never touch.
-2. Lay the battery in the base, wire end toward the USB-C notch.
+2. Lay the battery in the base, wire end toward the end with the switch.
 3. Push the switch into the lid from the inside, lever through the side slot. The two
    blocks either side hold it; a dab of hot glue keeps it there.
-4. Put foam tape on the battery, set the board on it with USB-C toward the notch, and
-   press the lid on. Rails inside keep the board from sliding.
+4. Put foam tape on the battery, set the board on it crosswise at the other end, USB-C
+   toward the notch in the long side, and press the lid on. Rails inside keep the board from sliding.
 
 Off disconnects the battery so nothing drains it. Plugged into the calculator, the
 board runs either way, but the battery only charges while the switch is on.

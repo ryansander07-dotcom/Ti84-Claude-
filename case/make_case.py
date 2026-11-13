@@ -313,8 +313,8 @@ def pod_base():
 # ---- mini box: plain XIAO ESP32S3, no camera -------------------------------------------
 
 # The battery lies flat on the floor; the board lies on it (on a layer of foam
-# tape), USB-C at the +Y end. Guide rails hanging from the cover keep the board
-# from sliding.
+# tape), USB-C toward the -X side. Guide rails hanging from the cover keep the
+# board from sliding.
 MINI_CAVITY_W = BATTERY_WIDTH + 2 * CLEARANCE
 MINI_CAVITY_L = BATTERY_LENGTH + 2 * CLEARANCE
 MINI_INNER_W = MINI_CAVITY_W + 2 * LIP_WALL + 2 * LIP_FIT
@@ -323,7 +323,11 @@ MINI_W = MINI_INNER_W + 2 * COVER_WALL
 MINI_L = MINI_INNER_L + 2 * COVER_WALL
 MINI_BOARD_Z = BATTERY_THICKNESS + MINI_TAPE         # bottom of the board, above the floor
 MINI_INNER_H = MINI_BOARD_Z + MINI_BOARD_HEIGHT + CLEARANCE
-MINI_BOARD_CY = MINI_CAVITY_L / 2 - MINI_BOARD_LENGTH / 2 - CLEARANCE
+# The board lies crosswise at the +Y end, USB-C facing the -X wall, so the cable
+# comes out of a long side. The switch is on the other long side (+X).
+MINI_BOARD_CX = -MINI_CAVITY_W / 2 + MINI_BOARD_LENGTH / 2 + CLEARANCE
+MINI_BOARD_CY = MINI_CAVITY_L / 2 - MINI_BOARD_WIDTH / 2 - CLEARANCE
+MINI_USB_X = MINI_BOARD_CX - MINI_BOARD_LENGTH / 2  # face of the USB-C port
 # The switch sits at the end away from the USB-C, above the battery, where the
 # board doesn't reach.
 SWITCH_CY = -MINI_CAVITY_L / 2 + 0.8 + SWITCH_LENGTH / 2
@@ -340,22 +344,23 @@ def mini_base():
 
 def mini_cover():
     c = shell(MINI_W, MINI_L, MINI_INNER_H, MINI_RADIUS)
-    # USB-C notch in the +Y wall, open at the top, so the plug's plastic overmold
-    # can pass the wall and the plug seats fully.
-    c -= cube(-USB_OPENING_WIDTH / 2, USB_OPENING_WIDTH / 2, MINI_BOARD_CY + MINI_BOARD_LENGTH / 2 - 0.5, MINI_L / 2 + 1,
+    # USB-C notch in the -X wall (a long side), open at the top, so the plug's
+    # plastic overmold can pass the wall and the plug seats fully.
+    c -= cube(-MINI_W / 2 - 1, MINI_USB_X + 0.5,
+              MINI_BOARD_CY - USB_OPENING_WIDTH / 2, MINI_BOARD_CY + USB_OPENING_WIDTH / 2,
               MINI_BOARD_Z - 1.5, MINI_INNER_H + COVER_TOP + 1)
-    # Rails down each long side of the board and a stop at its far end, hanging
-    # from the top. They end above the battery.
+    # Rails along each long edge of the board and a stop at its far (+X) end,
+    # hanging from the top. They end above the battery.
     rail_z0 = MINI_BOARD_Z + 1.0
-    y0, y1 = MINI_BOARD_CY - MINI_BOARD_LENGTH / 2, MINI_BOARD_CY + MINI_BOARD_LENGTH / 2
-    for sx in (-1, 1):
-        x = sx * (MINI_BOARD_WIDTH / 2 + CLEARANCE + 0.6)
-        c += cube(x - 0.6, x + 0.6, y0 + 2, y1 - 2, rail_z0, MINI_INNER_H + 0.01)
-    c += cube(-5, 5, y0 - CLEARANCE - 1.2, y0 - CLEARANCE, rail_z0, MINI_INNER_H + 0.01)
+    x0, x1 = MINI_USB_X, MINI_BOARD_CX + MINI_BOARD_LENGTH / 2
+    for sy in (-1, 1):
+        y = MINI_BOARD_CY + sy * (MINI_BOARD_WIDTH / 2 + CLEARANCE + 0.6)
+        c += cube(x0 + 2, x1 - 2, y - 0.6, y + 0.6, rail_z0, MINI_INNER_H + 0.01)
+    c += cube(x1 + CLEARANCE, x1 + CLEARANCE + 1.2, MINI_BOARD_CY - 5, MINI_BOARD_CY + 5, rail_z0, MINI_INNER_H + 0.01)
     # Vents over the board.
     for i in range(3):
-        x = -4 + i * 4
-        c -= cube(x - 0.6, x + 0.6, MINI_BOARD_CY - 5, MINI_BOARD_CY + 5, MINI_INNER_H - 1, MINI_INNER_H + COVER_TOP + 1)
+        y = MINI_BOARD_CY - 4 + i * 4
+        c -= cube(MINI_BOARD_CX - 5, MINI_BOARD_CX + 5, y - 0.6, y + 0.6, MINI_INNER_H - 1, MINI_INNER_H + COVER_TOP + 1)
     # Power switch: a slot for the lever in the +X wall, and two blocks hanging from
     # the lid that hold the switch body against the wall at both ends.
     slot_l = SWITCH_LEVER + SWITCH_TRAVEL + 0.8
