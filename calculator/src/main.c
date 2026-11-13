@@ -31,6 +31,8 @@
 /* Wait this long for Claude (it reads photos slowly) and for quick replies. */
 #define SLOW_TIMEOUT 200
 #define QUICK_TIMEOUT 10
+#define PING_TIMEOUT 3
+#define CANCEL_WAIT 30 /* after [clear], wait this long for the dongle to finish */
 
 /* Room for a full Wi-Fi name; the screen shows the first COLS characters. */
 static char lines[MAX_LINES][NAME_LEN + 1];
@@ -193,17 +195,39 @@ static bool get_text(const char *prompt, enum mode mode, size_t max_len) {
 
 /* ---------- talking to the dongle ---------- */
 
+/* Check something is answering on USB: send PING and wait briefly for PONG.
+   Anything else that arrives first (the end of a cancelled answer) is thrown away. */
+static bool ping(void) {
+    if (!link_send("PING")) return false;
+    for (;;) {
+        int n = link_read_line(reply, sizeof reply, PING_TIMEOUT, true);
+        if (n < 0) return false;
+        if (strcmp(reply, "PONG") == 0) return true;
+    }
+}
+
 static bool require_link(void) {
     for (int i = 0; i < 50 && !link_ready(); i++) {
         clock_t t = clock() + CLOCKS_PER_SEC / 50;
         while (clock() < t) link_poll();
     }
-    if (link_ready()) return true;
-    show_message("Dongle not connected.", "enter: back");
-    put_row(2, "Plug it into the USB port");
-    put_row(3, "with the OTG cable, wait a");
-    put_row(4, "few seconds, then try");
-    put_row(5, "again.");
+    if (!link_ready()) {
+        show_message("Dongle not connected.", "enter: back");
+        put_row(2, "Plug it into the USB port");
+        put_row(3, "with the OTG cable, wait a");
+        put_row(4, "few seconds, then try");
+        put_row(5, "again.");
+        wait_for_key();
+        return false;
+    }
+    show_message("Checking the dongle...", "clear: cancel");
+    if (ping()) return true;
+    show_message("Nothing answered on USB.", "enter: back");
+    put_row(2, "Plugged into a computer?");
+    put_row(3, "Start bridge.py there.");
+    put_row(5, "Dongle: if you just");
+    put_row(6, "cancelled, it may still be");
+    put_row(7, "finishing. Try again soon.");
     wait_for_key();
     return false;
 }
@@ -243,8 +267,8 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
             continue;
         }
         if (n == LINK_CANCELLED) {
-            show_message("Cancelling...", "");
-            link_skip_to_end(SLOW_TIMEOUT);
+            show_message("Cancelling...", "clear: stop waiting");
+            link_skip_to_end(CANCEL_WAIT);
             line_count = 0;
             return false;
         }
@@ -427,7 +451,7 @@ static char current_net[NAME_LEN + 1];
 static void load_saved(void) {
     saved_count = 0;
     current_net[0] = '\0';
-    if (!request("SAVED", NULL, QUICK_TIMEOUT)) return;
+    if (!request("SAVED", NULL, PING_TIMEOUT)) return;
     for (int i = 0; i < line_count; i++) {
         if (line_kind[i] == 'C') strcpy(current_net, lines[i]);
         if (line_kind[i] == 'W' && saved_count < MAX_NETWORKS) strcpy(saved_names[saved_count++], lines[i]);
@@ -636,8 +660,8 @@ int main(void) {
     for (;;) {
         if (link_ready() != was_ready) {
             was_ready = link_ready();
-            if (was_ready) request("CREDIT", NULL, QUICK_TIMEOUT); /* for the warning line */
             draw_menu();
+            if (was_ready && request("CREDIT", NULL, PING_TIMEOUT)) draw_menu(); /* for the warning line */
         }
         link_poll();
         uint8_t k = os_GetCSC();

@@ -130,6 +130,10 @@ python bridge.py --serial COM3                   # Windows (check Device Manager
 
 Asking questions and Status work with the bridge. Photo and Wi-Fi need the dongle.
 
+No OTG cable yet? Plug both the calculator (running CLAUDE) and the dongle into the
+computer and run `.venv/bin/python esp32/tools/relay.py`. It passes everything between
+them, so photos, Wi-Fi and credit work too.
+
 ## Step 3: set up the dongle
 
 1. Install the [Arduino IDE](https://www.arduino.cc/en/software) (or `arduino-cli`),

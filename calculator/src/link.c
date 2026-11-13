@@ -140,7 +140,7 @@ bool link_read_bytes(uint8_t *dst, size_t len, uint32_t timeout_s) {
 void link_skip_to_end(uint32_t timeout_s) {
     char line[64];
     for (;;) {
-        int n = link_read_line(line, sizeof line, timeout_s, false);
+        int n = link_read_line(line, sizeof line, timeout_s, true);
         if (n < 0 || strcmp(line, "END") == 0) return;
     }
 }

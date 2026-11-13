@@ -25,7 +25,8 @@ int link_read_line(char *buf, size_t size, uint32_t timeout_s, bool allow_cancel
 /* Read exactly len raw bytes. */
 bool link_read_bytes(uint8_t *dst, size_t len, uint32_t timeout_s);
 
-/* Throw away input until an END line arrives (after a cancelled request). */
+/* Throw away input until an END line arrives (after a cancelled request).
+   [clear] stops waiting. */
 void link_skip_to_end(uint32_t timeout_s);
 
 #endif
