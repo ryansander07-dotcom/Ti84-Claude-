@@ -50,6 +50,17 @@ static bool cancel_requested() {
     return false;
 }
 
+// While Claude works, send H:<seconds> every 2 s so the calculator can show a
+// counter and knows the dongle is alive.
+static uint32_t work_started = 0, last_tick = 0;
+static void tick() {
+    uint32_t now = millis();
+    if (now - last_tick < 2000) return;
+    last_tick = now;
+    send_line("H:" + std::to_string((now - work_started) / 1000));
+}
+static void start_work() { work_started = last_tick = millis(); }
+
 static void send_page(size_t first) {
     for (size_t i = first; i < answer.size() && i < first + PAGE_LINES; i++) send_line(answer[i]);
 }
@@ -132,6 +143,7 @@ static void handle(const std::string &raw) {
     if (line.rfind("Q:", 0) == 0) {
         std::string q = line.substr(2, MAX_QUESTION);
         if (q.find_first_not_of(' ') == std::string::npos) return send_error("Type a question first.");
+        start_work();
         return reply_with_claude(ask_claude(q));
     }
 
@@ -160,6 +172,7 @@ static void handle(const std::string &raw) {
         std::string note = line.size() > 6 ? line.substr(6, MAX_QUESTION) : "";
         size_t len = 0;
         const uint8_t *jpeg = camera_photo(&len);
+        start_work();
         return reply_with_claude(ask_claude(note, jpeg, len));
     }
 
@@ -266,6 +279,7 @@ void setup() {
 
     credit_begin();
     claude_set_cancel_check(cancel_requested);
+    claude_set_tick(tick);
     Serial.printf("camera: %s\n", camera_begin() ? "ok" : "not found");
     wifi_begin();
 }

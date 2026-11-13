@@ -21,7 +21,11 @@ namespace {
 const char *HOST = "api.anthropic.com";
 
 bool (*cancel_check)() = nullptr;
-bool cancelled() { return cancel_check && cancel_check(); }
+void (*tick_fn)() = nullptr;
+bool cancelled() {
+    if (tick_fn) tick_fn();
+    return cancel_check && cancel_check();
+}
 
 const char *SYSTEM_PROMPT =
     "You answer questions for a student using a TI-84 Plus CE graphing calculator.\n"
@@ -154,6 +158,7 @@ ClaudeReply fail(const char *msg) { return {false, msg}; }
 }  // namespace
 
 void claude_set_cancel_check(bool (*check)()) { cancel_check = check; }
+void claude_set_tick(void (*tick)()) { tick_fn = tick; }
 
 ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t jpeg_len) {
     if (strlen(ANTHROPIC_API_KEY) == 0) return fail("No API key on the dongle. Add it to secrets.h and reflash.");
@@ -162,6 +167,7 @@ ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t 
     std::string body;
     if (!build_body(question, jpeg, jpeg_len, body)) return fail("Photo too big to send.");
 
+    cancelled();  // first "still working" signal before the connection starts
     WiFiClientSecure client;
     client.setCACert(TLS_ROOTS);
     client.setTimeout(30);  // seconds, for connect and the TLS handshake

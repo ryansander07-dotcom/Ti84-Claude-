@@ -228,6 +228,7 @@ message per line ending in `\n`, except preview frames, which carry raw pixel by
 | dongle to calculator | `P:<lines>` | Before an answer: its total length. The first 9 lines follow; the calculator asks for others with `PAGE:<first line>` |
 | calculator to dongle | `PAGE:<n>` | Send 9 lines of the last answer, starting at line n |
 | calculator to dongle | byte 0x18 | Cancel: the dongle stops waiting on Claude and replies `E:Cancelled.` |
+| dongle to calculator | `H:<seconds>` | Every 2 s while Claude works, so the calculator shows a counter and knows the dongle is alive (it gives up after 30 s of silence) |
 | dongle to calculator | `END` | The reply is complete |
 
 `PHOTO` replies may take 10-60 seconds while Claude reads the picture. The bridge

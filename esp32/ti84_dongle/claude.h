@@ -15,4 +15,7 @@ struct ClaudeReply {
 // cancelled).
 void claude_set_cancel_check(bool (*check)());
 
+// Called often while waiting on Claude, to show the calculator it's still working.
+void claude_set_tick(void (*tick)());
+
 ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg = nullptr, size_t jpeg_len = 0);

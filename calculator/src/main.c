@@ -33,6 +33,7 @@
 #define SLOW_TIMEOUT 200
 #define QUICK_TIMEOUT 10
 #define PING_TIMEOUT 3
+#define IDLE_LIMIT 30 /* seconds with nothing from the dongle before giving up */
 
 /* Room for a full Wi-Fi name; the screen shows the first COLS characters. */
 static char lines[MAX_LINES][NAME_LEN + 1];
@@ -253,12 +254,15 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
         return false;
     }
 
-    clock_t started = clock();
+    /* Give up when nothing at all has come for a while. While Claude works the
+       dongle sends H:<seconds> every 2 s, so a long answer never trips this. */
+    clock_t last_heard = clock();
+    uint32_t idle_limit = timeout_s < IDLE_LIMIT ? timeout_s : IDLE_LIMIT;
     int dots = 0;
     for (;;) {
         int n = link_read_line(reply, sizeof reply, 1, true);
         if (n == LINK_TIMEOUT) {
-            if ((uint32_t)((clock() - started) / CLOCKS_PER_SEC) >= timeout_s) {
+            if ((uint32_t)((clock() - last_heard) / CLOCKS_PER_SEC) >= idle_limit) {
                 strcpy(lines[0], "No reply from the dongle.");
                 line_kind[0] = 'E';
                 line_count = 1;
@@ -278,6 +282,15 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
             link_send("\x18");
             line_count = 0;
             return false;
+        }
+        last_heard = clock();
+        if (n >= 2 && reply[0] == 'H' && reply[1] == ':') {
+            if (waiting) {
+                char row[COLS + 1];
+                snprintf(row, sizeof row, "Working... %s s", reply + 2);
+                put_row(1, row);
+            }
+            continue;
         }
         if (n == LINK_UNPLUGGED) {
             strcpy(lines[0], "Dongle was unplugged.");
