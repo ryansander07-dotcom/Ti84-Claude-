@@ -55,6 +55,12 @@ static int window_start = 0;
 
 /* ---------- home screen text ---------- */
 
+/* What each row of the screen shows now. The OS draws text slowly, so a row is
+   only redrawn when its text actually changes; that keeps key presses snappy. */
+static char shown_rows[ROWS][COLS + 1];
+
+static void forget_screen(void) { memset(shown_rows, 0xFF, sizeof shown_rows); }
+
 static void put_row(uint8_t row, const char *text) {
     char padded[COLS + 1];
     /* Never write the very last cell: that would scroll the home screen. */
@@ -64,6 +70,8 @@ static void put_row(uint8_t row, const char *text) {
     memset(padded, ' ', width);
     memcpy(padded, text, len);
     padded[width] = '\0';
+    if (memcmp(shown_rows[row], padded, width + 1) == 0) return;
+    memcpy(shown_rows[row], padded, width + 1);
     os_SetCursorPos(row, 0);
     os_PutStrLine(padded);
 }
@@ -487,6 +495,7 @@ static void photo(void) {
     gfx_SetDrawBuffer();
     enum photo_choice choice = aim_and_snap();
     gfx_End();
+    forget_screen(); /* graphics mode wiped the text screen */
     clear_screen();
 
     if (choice == PHOTO_CANCEL) return;
@@ -709,6 +718,7 @@ static void draw_menu(void) {
 
 int main(void) {
     os_ClrHome();
+    forget_screen();
     if (!link_begin()) {
         show_message("USB didn't start.", "enter: quit");
         wait_for_key();

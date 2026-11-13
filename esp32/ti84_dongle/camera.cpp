@@ -75,9 +75,13 @@ bool camera_begin() {
 bool camera_ok() {
     static uint32_t last_try = 0;
     if (!ready && millis() - last_try > 3000) {
+        // The first start after power-up sometimes fails once and works on the
+        // next try, so try twice.
+        for (int i = 0; i < 2 && !ready; i++) {
+            esp_camera_deinit();
+            camera_begin();
+        }
         last_try = millis();
-        esp_camera_deinit();
-        camera_begin();
     }
     return ready;
 }

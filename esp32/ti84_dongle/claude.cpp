@@ -162,6 +162,12 @@ void claude_set_tick(void (*tick)()) { tick_fn = tick; }
 
 ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t jpeg_len) {
     if (strlen(ANTHROPIC_API_KEY) == 0) return fail("No API key on the dongle. Add it to secrets.h and reflash.");
+    // Wi-Fi sometimes drops for a moment; the background task rejoins within a
+    // few seconds, so wait for it before giving up.
+    for (uint32_t t = millis(); WiFi.status() != WL_CONNECTED && millis() - t < 10000;) {
+        if (cancelled()) return fail("Cancelled.");
+        delay(100);
+    }
     if (WiFi.status() != WL_CONNECTED) return fail("No Wi-Fi. Pick a network in the Wi-Fi menu.");
 
     std::string body;

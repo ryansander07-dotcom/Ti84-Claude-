@@ -280,7 +280,9 @@ void setup() {
     credit_begin();
     claude_set_cancel_check(cancel_requested);
     claude_set_tick(tick);
-    Serial.printf("camera: %s\n", camera_begin() ? "ok" : "not found");
+    bool cam = false;
+    for (int i = 0; i < 3 && !cam; i++) cam = camera_begin() || camera_ok();
+    Serial.printf("camera: %s\n", cam ? "ok" : "not found");
     wifi_begin();
 }
 
