@@ -30,8 +30,9 @@ One-time setup: put your API key (and, optionally, your home Wi-Fi) in
 
 **Hardware**
 
-- A Seeed XIAO ESP32S3 Sense (ESP32-S3 with camera and 8 MB PSRAM). The firmware's
-  camera pins are set for this board.
+- An ESP32-S3 camera board with native USB and 8 MB PSRAM. Tested: the Meshnology W11
+  (16 MB flash, OV3660 camera). The Seeed XIAO ESP32S3 Sense works too. Attach the
+  board's antenna; without it Wi-Fi finds no networks.
 - A USB OTG cable, mini-USB (male) to USB-C (male). It must be OTG so the calculator
   acts as the USB host and powers the dongle.
 - An EEMB 402535 LiPo (3.7 V, 320 mAh) on the board's battery pads, so Wi-Fi never
@@ -116,20 +117,29 @@ Asking questions and Status work with the bridge. Photo and Wi-Fi need the dongl
    calculator later.
 3. Open `esp32/ti84_dongle/ti84_dongle.ino` and pick these settings in the Tools menu:
 
-   | Setting | Value |
-   |---|---|
-   | Board | XIAO_ESP32S3 |
-   | USB Mode | USB-OTG (TinyUSB) |
-   | USB CDC On Boot | Disabled |
-   | PSRAM | OPI PSRAM |
+   | Setting | Meshnology W11 | Seeed XIAO ESP32S3 Sense |
+   |---|---|---|
+   | Board | ESP32S3 Dev Module | XIAO_ESP32S3 |
+   | USB Mode | USB-OTG (TinyUSB) | USB-OTG (TinyUSB) |
+   | USB CDC On Boot | Disabled | Disabled |
+   | PSRAM | OPI PSRAM | OPI PSRAM |
+   | Flash Size | 16MB | (fixed) |
+   | Partition Scheme | 16M Flash (3MB APP/9.9MB FATFS) | Default |
 
-   With `arduino-cli`, the board name is
-   `esp32:esp32:XIAO_ESP32S3:USBMode=default,CDCOnBoot=cdc,PSRAM=opi`. On an Apple
+   With `arduino-cli`, the board names are
+   `esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB`
+   (W11) and `esp32:esp32:XIAO_ESP32S3:USBMode=default,CDCOnBoot=cdc,PSRAM=opi` (XIAO).
+   On an Apple
    Silicon Mac, a "bad CPU type" error during the build means Arduino's sketch scanner
    needs Rosetta: run `softwareupdate --install-rosetta` once.
 
 4. Plug the dongle into your computer and click Upload. If the upload can't find the
    board, hold the tiny **B** (boot) button while plugging it in, then upload again.
+
+To check it before using the calculator, run `.venv/bin/python esp32/tools/test_dongle.py`.
+It talks to the dongle over USB the way the calculator does: ping, status, and one
+question to Claude. If the camera's wiring is unknown (as on the W11), upload
+`esp32/tools/camera_probe/` once; it reports which wiring the camera answers on.
 
 After that, unplug it from the computer and plug it into the calculator with the OTG
 cable. Start `CLAUDE`, open **Wi-Fi** to join a network, and you're set. The dongle

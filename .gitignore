@@ -17,3 +17,6 @@ calculator/obj/
 
 # Dongle API key and Wi-Fi
 esp32/**/secrets.h
+
+# Third-party calculator files downloaded for installing
+calculator/send-to-calculator/
