@@ -1,0 +1,43 @@
+CLAUDE CALCULATOR: START HERE
+=============================
+
+Ask Claude questions and photograph math problems from a TI-84 Plus CE, using a
+small plug-in dongle (Meshnology W11 ESP32-S3 board with a camera).
+
+Folders
+-------
+1 - Calculator files     The three files that go on the calculator, and
+                         "Send to Calculator", which opens everything you need.
+2 - Dongle               "Update Dongle" builds and uploads the dongle's software.
+                         "Test Dongle" asks one quick question to check it works.
+3 - Test without the     "Start Relay" connects the calculator to the dongle
+    OTG cable            through this Mac, for use before you have the cable.
+4 - 3D print files       Bambu-ready 3MF files with print notes, and pictures.
+5 - Wiring and parts     How to wire the battery and switch, and the parts list.
+
+Setting up a calculator (about 2 minutes)
+-----------------------------------------
+1. Plug the calculator into this Mac and turn it on.
+2. Open "1 - Calculator files" and double-click "Send to Calculator".
+3. In the Finder window it opens, press Cmd+A and drag the files onto the
+   calculator in TI Connect CE. Click SEND.
+4. First time only, on the calculator: [2nd] [+] (MEM) > 2: Mem Management >
+   Prgm, move to A, press [enter] so the * next to it goes away.
+5. [prgm] > A > [enter]. In the list that opens, pick CLAUDE.
+
+Using it
+--------
+Plug the dongle into the calculator's USB port with a mini-USB to USB-C OTG
+cable. The menu shows "Dongle: connected" after a few seconds.
+
+  1: Ask a question     type it, [enter]
+  2: Photo of a problem aim, [enter] to take it, [enter] again to solve
+  3: Wi-Fi              see networks, add one, forget one
+  4: Credit             enter your API balance once; it warns when low
+  5: Status
+
+[clear] backs out of anything right away, even while Claude is thinking.
+[clear] on the main menu quits.
+
+Your API key lives only on the dongle (in secrets.h on this Mac); it is never
+on the calculator or in these folders.

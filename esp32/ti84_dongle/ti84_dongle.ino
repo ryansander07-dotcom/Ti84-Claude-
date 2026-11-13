@@ -13,6 +13,7 @@
 #include <USBCDC.h>
 
 #include <string>
+#include <vector>
 
 #include "calc_text.h"
 #include "camera.h"
@@ -24,6 +25,34 @@
 USBCDC Calc;
 
 static std::string line_buf;
+static void send_line(const std::string &line);
+
+// The last answer, kept here so the calculator only holds one screenful.
+// The calculator asks for more with PAGE:<first line>.
+static std::vector<std::string> answer;
+static const size_t PAGE_LINES = 9;
+
+// The calculator sends this byte (CAN) when [clear] is pressed while it waits.
+static const int CANCEL_BYTE = 0x18;
+static bool cancel_requested() {
+    while (Calc.available()) {
+        int c = Calc.peek();
+        if (c == CANCEL_BYTE) {
+            Calc.read();
+            return true;
+        }
+        if (c == '\n' || c == '\r') {
+            Calc.read();
+            continue;
+        }
+        return false;  // a new request: leave it for loop()
+    }
+    return false;
+}
+
+static void send_page(size_t first) {
+    for (size_t i = first; i < answer.size() && i < first + PAGE_LINES; i++) send_line(answer[i]);
+}
 static uint8_t preview[PREVIEW_W * PREVIEW_H];
 
 static void send_line(const std::string &line) {
@@ -62,12 +91,18 @@ static void send_credit_code() {
 }
 
 static void reply_with_claude(const ClaudeReply &reply) {
-    send_wrapped(reply.ok ? 'A' : 'E', reply.text);
+    answer.clear();
+    char kind = reply.ok ? 'A' : 'E';
+    for (const std::string &l : to_screen_lines(reply.text)) answer.push_back(std::string(1, kind) + ":" + l);
     CreditState st = credit_state();
     if (st == CREDIT_LOW || st == CREDIT_EMPTY) {
-        send_line("S:");
-        send_wrapped('S', st == CREDIT_LOW ? "! " + credit_line() + " Add credit soon." : "! " + credit_line());
+        answer.push_back("S:");
+        for (const std::string &l : to_screen_lines(st == CREDIT_LOW ? "! " + credit_line() + " Add credit soon." : "! " + credit_line()))
+            answer.push_back("S:" + l);
     }
+    // P:<total lines>, then the first screenful; the rest on request.
+    send_line("P:" + std::to_string(answer.size()));
+    send_page(0);
     send_credit_code();
     send_line("END");
 }
@@ -80,6 +115,14 @@ static void handle(const std::string &raw) {
     std::string line = raw;
     while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
     Serial.printf("calc> %.60s\n", line.c_str());
+
+    if (line.empty()) return;  // a stray newline after a cancel
+
+    if (line.rfind("PAGE:", 0) == 0) {
+        send_page(strtoul(line.c_str() + 5, nullptr, 10));
+        send_line("END");
+        return;
+    }
 
     if (line == "PING") {
         send_line("PONG");
@@ -222,6 +265,7 @@ void setup() {
     USB.begin();
 
     credit_begin();
+    claude_set_cancel_check(cancel_requested);
     Serial.printf("camera: %s\n", camera_begin() ? "ok" : "not found");
     wifi_begin();
 }
@@ -230,6 +274,7 @@ void loop() {
     while (Calc.available()) {
         int c = Calc.read();
         if (c < 0) break;
+        if (c == CANCEL_BYTE) continue;  // a cancel that arrived after the work was done
         if (c == '\n') {
             handle(line_buf);
             line_buf.clear();

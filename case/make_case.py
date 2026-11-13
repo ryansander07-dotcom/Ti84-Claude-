@@ -39,27 +39,28 @@ import numpy as np
 from manifold3d import CrossSection, Manifold
 
 # ---- the TI-84 Plus CE battery door ------------------------------------------
-# Measured from a straight-on iFixit photo, scaled by the calculator's published
-# 86.9 mm (3.42 in) width, so expect up to about 1 mm of error. Check with
-# calipers or the fit test before printing a full case.
-DOOR_WIDTH = 63.4         # across the calculator (X)
-DOOR_LENGTH = 60.4        # along the calculator (Y)
+# Measured with calipers on the real door (2026-11-13). Screw and foot positions
+# are read off the photos, so allow about 0.5 mm there.
+DOOR_WIDTH = 57.0         # along the edge with the two hinge tabs (X)
+DOOR_LENGTH = 55.7        # from the hinge edge to the screw edge, tabs not included (Y)
 DOOR_THICKNESS = 1.6      # the flat part of the door; keeps the door flush (estimate)
-DOOR_CORNER_RADIUS = 3.8
+DOOR_CORNER_RADIUS = 3.0
 EDGE_MARGIN = 1.0         # the cover stays this far inside the door edge
 # Two captive Phillips screws at the top corners (the screen end).
-SCREW_INSET = 6.6         # screw centers from the left and right edges
-SCREW_FROM_TOP = 5.5      # screw centers from the top edge
+SCREW_INSET = 4.0         # screw centers from the left and right edges
+SCREW_FROM_TOP = 5.1      # screw centers from the screw edge
 SCREW_HOLE = 2.2          # fits the original screws
 SCREW_HEAD = 4.6          # counterbore for the screw heads
-# The bottom edge tucks under the case; the door lifts out from the screw end.
-TAB_WIDTH = 20.0
-TAB_LENGTH = 2.0          # how far the tongue sticks out past the bottom edge
-TAB_THICKNESS = 0.9
+# Two hinge tabs on the far edge hook under the case; the door lifts out from
+# the screw end. Measured: 4.95 mm wide, 24.15 mm across both.
+TAB_WIDTH = 4.95
+TAB_SPAN = 24.15          # outside edge to outside edge
+TAB_LENGTH = 2.6          # how far each tab sticks out past the edge (from the photo)
+TAB_THICKNESS = 1.2       # (estimate)
 # The calculator's two rubber feet sit in recesses near the door's bottom corners.
-FOOT_DIAMETER = 7.2
-FOOT_INSET = 6.3          # foot centers from the left and right edges
-FOOT_FROM_BOTTOM = 7.8    # foot centers from the bottom edge
+FOOT_DIAMETER = 6.2
+FOOT_INSET = 5.9          # foot centers from the left and right edges
+FOOT_FROM_BOTTOM = 4.8    # foot centers from the hinge edge
 FOOT_RECESS = 0.8         # recess depth in the door
 FOOT_HEIGHT = 2.0         # how far a foot stands up; the pod clears this
 
@@ -99,22 +100,25 @@ BOSS_FIT = 0.2
 MAGNET_INSET = 6.5        # boss centers from the cover's edges
 
 # ---- mini: plain XIAO ESP32S3, no camera ------------------------------------------
-MINI_BOARD_HEIGHT = 4.5   # board plus the USB-C port and shield on top (W11: 4.5 mm)
+MINI_BOARD_HEIGHT = 4.5   # board plus the USB-C port and shield on top (W11: measured 4.46 mm)
 MINI_FLOOR = 1.2
 MINI_TAPE = 0.5           # foam tape between the battery and the board
 # The no-camera box holds the Meshnology W11 main board (camera board left off).
 # From Meshnology's drawing: 18.00 x 23.50 mm, 24.54 mm with the USB-C, 4.5 mm tall.
 MINI_BOARD_WIDTH = 18.0
-MINI_BOARD_LENGTH = 24.54
-# Power switch on the side: an SS12D00-style mini slide switch, wired between the
-# battery's red wire and the board's B+ pad. It lies with its top (the lever side)
-# against the inside of the +X wall, lever out through a slot.
-SWITCH_LENGTH = 8.6       # body, along the wall
-SWITCH_WIDTH = 3.6        # body, top to bottom of the box
-SWITCH_DEPTH = 3.5        # body, from the wall inward (the pins stick out further)
-SWITCH_PINS = 3.0         # room for the pins and wires behind the body
-SWITCH_LEVER = 1.5        # lever cross-section
-SWITCH_TRAVEL = 2.0       # how far the lever slides
+MINI_BOARD_LENGTH = 24.62  # measured with the USB-C
+# Power switch: a slide switch with mounting ears (measured: body 12.6 mm long,
+# 19.4 mm across the ears), wired between the battery's red wire and the board's
+# B+ pad. Its lever face sits against the inside of a wall, lever out a slot,
+# ears flat on the wall. Body width, depth and lever size are ESTIMATES.
+SWITCH_LENGTH = 12.6      # body, along the wall
+SWITCH_EARS = 19.4        # across the mounting ears
+SWITCH_EAR_THICK = 0.6
+SWITCH_WIDTH = 6.5        # body, across the lever face (estimate)
+SWITCH_DEPTH = 6.5        # body, from the lever face back (estimate)
+SWITCH_PINS = 4.0         # pins and wire joints behind the body
+SWITCH_LEVER = 2.0        # lever cross-section (estimate)
+SWITCH_TRAVEL = 3.0       # how far the lever slides (estimate)
 
 SEGMENTS = 64
 OUT = Path(__file__).resolve().parent / "stl"
@@ -186,7 +190,9 @@ FEET = [(-DOOR_WIDTH / 2 + FOOT_INSET, FOOT_Y), (DOOR_WIDTH / 2 - FOOT_INSET, FO
 
 def door_plate():
     plate = box(DOOR_WIDTH, DOOR_LENGTH, DOOR_THICKNESS, DOOR_CORNER_RADIUS)
-    plate += cube(-TAB_WIDTH / 2, TAB_WIDTH / 2, -DOOR_LENGTH / 2 - TAB_LENGTH, -DOOR_LENGTH / 2 + 1, 0, TAB_THICKNESS)
+    for sx in (-1, 1):
+        x = sx * (TAB_SPAN - TAB_WIDTH) / 2
+        plate += cube(x - TAB_WIDTH / 2, x + TAB_WIDTH / 2, -DOOR_LENGTH / 2 - TAB_LENGTH, -DOOR_LENGTH / 2 + 1, 0, TAB_THICKNESS)
     for x, y in SCREWS:
         plate -= cylinder(SCREW_HOLE, -1, DOOR_THICKNESS + 1, x, y)
         plate -= cylinder(SCREW_HEAD, DOOR_THICKNESS / 2, DOOR_THICKNESS + 1, x, y)
@@ -316,7 +322,10 @@ def pod_base():
 # tape), USB-C toward the -X side. Guide rails hanging from the cover keep the
 # board from sliding.
 MINI_CAVITY_W = BATTERY_WIDTH + 2 * CLEARANCE
-MINI_CAVITY_L = BATTERY_LENGTH + 2 * CLEARANCE
+# The switch gets its own zone at the -Y end, beside the battery's wire end.
+MINI_SWITCH_ZONE = SWITCH_DEPTH + SWITCH_PINS + 1.0
+MINI_CAVITY_L = BATTERY_LENGTH + 2 * CLEARANCE + MINI_SWITCH_ZONE
+MINI_BATT_CY = MINI_CAVITY_L / 2 - CLEARANCE - BATTERY_LENGTH / 2
 MINI_INNER_W = MINI_CAVITY_W + 2 * LIP_WALL + 2 * LIP_FIT
 MINI_INNER_L = MINI_CAVITY_L + 2 * LIP_WALL + 2 * LIP_FIT
 MINI_W = MINI_INNER_W + 2 * COVER_WALL
@@ -328,17 +337,23 @@ MINI_INNER_H = MINI_BOARD_Z + MINI_BOARD_HEIGHT + CLEARANCE
 MINI_BOARD_CX = -MINI_CAVITY_W / 2 + MINI_BOARD_LENGTH / 2 + CLEARANCE
 MINI_BOARD_CY = MINI_CAVITY_L / 2 - MINI_BOARD_WIDTH / 2 - CLEARANCE
 MINI_USB_X = MINI_BOARD_CX - MINI_BOARD_LENGTH / 2  # face of the USB-C port
-# The switch sits at the end away from the USB-C, above the battery, where the
-# board doesn't reach.
-SWITCH_CY = -MINI_CAVITY_L / 2 + 0.8 + SWITCH_LENGTH / 2
-SWITCH_CZ = BATTERY_THICKNESS + 0.3 + SWITCH_WIDTH / 2  # center height above the floor, just over the battery
-SWITCH_WALL_X = MINI_INNER_W / 2                    # inside face of the +X wall
+# The switch stands on the floor against the -Y end wall (the base's rim has a gap
+# there), lever out the end.
+SWITCH_WALL_Y = -MINI_INNER_L / 2                   # inside face of the -Y wall
+SWITCH_CZ = 0.3 + SWITCH_WIDTH / 2                  # center height above the floor
 MINI_RADIUS = 3.0
 
 
 def mini_base():
     base = box(MINI_W, MINI_L, MINI_FLOOR, MINI_RADIUS)
     r = rim(MINI_INNER_W, MINI_INNER_L, MINI_RADIUS)
+    # Two low stops keep the battery out of the switch zone; the gap between
+    # them is for its wires.
+    y = MINI_BATT_CY - BATTERY_LENGTH / 2 - CLEARANCE
+    r += cube(3.0, 10.0, y - 1.2, y, 0, 1.5) + cube(-10.0, -3.0, y - 1.2, y, 0, 1.5)
+    # Gap in the rim where the switch and its ears stand.
+    r -= cube(-SWITCH_EARS / 2 - 0.4, SWITCH_EARS / 2 + 0.4, -MINI_L / 2, SWITCH_WALL_Y + LIP_FIT + LIP_WALL + 1, -1,
+              LIP_HEIGHT + 1)
     return base + r.translate((0, 0, MINI_FLOOR))
 
 
@@ -361,15 +376,15 @@ def mini_cover():
     for i in range(3):
         y = MINI_BOARD_CY - 4 + i * 4
         c -= cube(MINI_BOARD_CX - 5, MINI_BOARD_CX + 5, y - 0.6, y + 0.6, MINI_INNER_H - 1, MINI_INNER_H + COVER_TOP + 1)
-    # Power switch: a slot for the lever in the +X wall, and two blocks hanging from
-    # the lid that hold the switch body against the wall at both ends.
-    slot_l = SWITCH_LEVER + SWITCH_TRAVEL + 0.8
+    # Power switch: a slot for the lever in the -Y end wall, and two blocks hanging
+    # from the lid that hold the switch (behind its ears) against the wall.
+    slot_w = SWITCH_LEVER + SWITCH_TRAVEL + 0.8
     slot_h = SWITCH_LEVER + 0.8
-    c -= cube(SWITCH_WALL_X - 1, MINI_W / 2 + 1, SWITCH_CY - slot_l / 2, SWITCH_CY + slot_l / 2,
-              SWITCH_CZ - slot_h / 2, SWITCH_CZ + slot_h / 2)
-    for sy in (-1, 1):
-        y_in = SWITCH_CY + sy * (SWITCH_LENGTH / 2 + 0.2)
-        c += cube(SWITCH_WALL_X - SWITCH_DEPTH, SWITCH_WALL_X + 0.01, min(y_in, y_in + sy * 1.2), max(y_in, y_in + sy * 1.2),
+    c -= cube(-slot_w / 2, slot_w / 2, -MINI_L / 2 - 1, SWITCH_WALL_Y + 1, SWITCH_CZ - slot_h / 2, SWITCH_CZ + slot_h / 2)
+    y0 = SWITCH_WALL_Y + SWITCH_EAR_THICK + 0.2
+    for sx in (-1, 1):
+        x_in = sx * (SWITCH_LENGTH / 2 + 0.2)
+        c += cube(min(x_in, x_in + sx * 1.2), max(x_in, x_in + sx * 1.2), y0, SWITCH_WALL_Y + SWITCH_DEPTH,
                   SWITCH_CZ - SWITCH_WIDTH / 2, MINI_INNER_H + 0.01)
     return print_top_down(c, MINI_INNER_H + COVER_TOP)
 
@@ -478,7 +493,7 @@ CALC_CORNER = 9.0
 PLATE_THICKNESS = 1.6     # everywhere except the raised area
 GRIP_DEPTH = 4.0          # how far the side walls reach down the calculator's sides
 GRIP_LIP = 1.0            # the small inward lip that hooks the edge
-W11_FLAT_HEIGHT = 7.0     # W11 + expansion board with the camera unfolded off it (estimate)
+W11_FLAT_HEIGHT = 8.85    # W11 + camera expansion board stacked, camera unfolded off it (measured)
 BACK_FOAM = 1.0           # foam pad under the board; lifts the USB-C so the plug clears the calculator
 USB_CENTER = 2.6          # USB-C center above the bottom of the W11 board
 PLUG_HEIGHT = 6.5         # a USB-C plug's plastic overmold, top to bottom
@@ -489,7 +504,7 @@ BACK_LOW_EXTRA = 0.6      # over the battery: room for the antenna sticker and t
 POD_FROM_TOP = 6.0        # gap between the calculator's top edge and the raised area
 POD_RADIUS = 3.0
 POD_EDGE = 2.0            # wall around the parts
-BACK_SWITCH_CZ = 3.0      # switch center height above the calculator's back; the lever clears the plate
+BACK_SWITCH_CZ = 0.6 + SWITCH_WIDTH / 2  # switch center above the calculator's back; the lever clears the plate
 
 
 class BackPlate:
@@ -576,10 +591,10 @@ class BackPlate:
         slot_l = SWITCH_LEVER + SWITCH_TRAVEL + 0.8
         slot_h = SWITCH_LEVER + 0.8
         body -= cube(wx - 1, self.w / 2 + 1, sy - slot_l / 2, sy + slot_l / 2, sz - slot_h / 2, sz + slot_h / 2)
-        for d in (-1, 1):
+        for d in (-1, 1):  # behind the ears, which lie flat on the wall
             y_in = sy + d * (SWITCH_LENGTH / 2 + 0.2)
-            body += cube(wx - SWITCH_DEPTH, wx + 0.01, min(y_in, y_in + d * 1.2), max(y_in, y_in + d * 1.2),
-                         sz - SWITCH_WIDTH / 2, ih + 0.01)
+            body += cube(wx - SWITCH_DEPTH, wx - SWITCH_EAR_THICK - 0.2, min(y_in, y_in + d * 1.2),
+                         max(y_in, y_in + d * 1.2), sz - SWITCH_WIDTH / 2, ih + 0.01)
         return body
 
 

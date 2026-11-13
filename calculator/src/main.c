@@ -20,7 +20,8 @@
 #define ROWS 10
 #define BODY_ROWS 9 /* rows 0-8; row 9 is the hint line */
 
-#define MAX_LINES 300
+/* Only a screenful of an answer is kept here; the dongle holds the rest. */
+#define MAX_LINES 40
 #define MAX_INPUT 500
 #define MAX_NETWORKS 20
 #define NAME_LEN 32 /* longest Wi-Fi name */
@@ -32,7 +33,6 @@
 #define SLOW_TIMEOUT 200
 #define QUICK_TIMEOUT 10
 #define PING_TIMEOUT 3
-#define CANCEL_WAIT 30 /* after [clear], wait this long for the dongle to finish */
 
 /* Room for a full Wi-Fi name; the screen shows the first COLS characters. */
 static char lines[MAX_LINES][NAME_LEN + 1];
@@ -46,7 +46,11 @@ static int credit_code = -1;
 
 static char input[MAX_INPUT + 1];
 static char message[MAX_INPUT + 16];
-static char reply[1100];
+static char reply[160];
+
+/* For a paged answer: its total length and which line lines[0] is. */
+static int answer_total = -1;
+static int window_start = 0;
 
 /* ---------- home screen text ---------- */
 
@@ -237,6 +241,8 @@ static bool require_link(void) {
    With waiting == NULL nothing is drawn (for quick background checks). */
 static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
     line_count = 0;
+    answer_total = -1;
+    window_start = 0;
     if (waiting ? !require_link() : !link_ready()) return false;
     if (waiting) show_message(waiting, "clear: cancel");
     if (!link_send(msg)) {
@@ -267,8 +273,9 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
             continue;
         }
         if (n == LINK_CANCELLED) {
-            show_message("Cancelling...", "clear: stop waiting");
-            link_skip_to_end(CANCEL_WAIT);
+            /* Tell the dongle to drop it and leave right away. Whatever it still
+               sends is thrown away by the PING before the next request. */
+            link_send("\x18");
             line_count = 0;
             return false;
         }
@@ -279,6 +286,10 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
             return false;
         }
         if (strcmp(reply, "END") == 0) return true;
+        if (n >= 2 && reply[0] == 'P' && reply[1] == ':') {
+            answer_total = atoi(reply + 2); /* paged answer: this many lines in all */
+            continue;
+        }
         if (n >= 2 && reply[0] == 'K' && reply[1] == ':') {
             /* K:<cents>,<state>: the credit estimate, not shown as a line */
             long cents;
@@ -298,20 +309,39 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
     }
 }
 
-/* Scrollable view of `lines`. */
+/* Load the screenful starting at `first` of a paged answer from the dongle. */
+static bool fetch_page(int first) {
+    int total = answer_total;
+    char msg[16];
+    snprintf(msg, sizeof msg, "PAGE:%d", first);
+    bool ok = request(msg, NULL, QUICK_TIMEOUT);
+    answer_total = total;
+    window_start = first;
+    return ok && line_count > 0;
+}
+
+/* Scrollable view of `lines`, or of a paged answer kept on the dongle. */
 static void show_lines(void) {
     if (line_count == 0) return;
+    int total = answer_total > line_count ? answer_total : line_count;
+    bool paged = total > line_count;
     int top = 0;
-    int max_top = line_count > BODY_ROWS ? line_count - BODY_ROWS : 0;
+    int max_top = total > BODY_ROWS ? total - BODY_ROWS : 0;
     for (;;) {
+        if (paged && (top < window_start || top + BODY_ROWS > window_start + line_count) &&
+            !fetch_page(top)) {
+            show_message("Lost the dongle.", "enter: back");
+            wait_for_key();
+            return;
+        }
         for (uint8_t r = 0; r < BODY_ROWS; r++) {
-            int i = top + r;
-            put_row(r, i < line_count ? lines[i] : "");
+            int i = top + r - window_start;
+            put_row(r, i >= 0 && i < line_count ? lines[i] : "");
         }
         char hint[COLS];
         if (max_top > 0)
             snprintf(hint, sizeof hint, "%d-%d/%d arrows clr=back", top + 1,
-                     top + BODY_ROWS < line_count ? top + BODY_ROWS : line_count, line_count);
+                     top + BODY_ROWS < total ? top + BODY_ROWS : total, total);
         else
             snprintf(hint, sizeof hint, "clear: back");
         put_row(ROWS - 1, hint);
@@ -352,8 +382,9 @@ static void bar(const char *text) {
     gfx_PrintStringXY(text, 2, 230);
 }
 
-/* Ask for one preview frame and draw it. */
-static bool draw_preview(gfx_sprite_t *frame) {
+/* Ask for one preview frame and draw it at 2x, row by row, straight into the
+   draw buffer: no frame copy is kept in the calculator's RAM. */
+static bool draw_preview(void) {
     if (!link_send("VIEW")) return false;
     int n = link_read_line(reply, sizeof reply, QUICK_TIMEOUT, false);
     if (n < 0) return false;
@@ -363,16 +394,22 @@ static bool draw_preview(gfx_sprite_t *frame) {
         link_skip_to_end(QUICK_TIMEOUT);
         return false;
     }
-    if (!link_read_bytes(frame->data, size, QUICK_TIMEOUT)) return false;
+    static uint8_t row[PREVIEW_W];
+    uint8_t *screen = (uint8_t *)gfx_vbuffer;
+    for (int y = 0; y < PREVIEW_H; y++) {
+        if (!link_read_bytes(row, PREVIEW_W, QUICK_TIMEOUT)) return false;
+        uint8_t *out = screen + (2 * y) * GFX_LCD_WIDTH;
+        for (int x = 0; x < PREVIEW_W; x++) out[2 * x] = out[2 * x + 1] = row[x];
+        memcpy(out + GFX_LCD_WIDTH, out, GFX_LCD_WIDTH);
+    }
     link_skip_to_end(QUICK_TIMEOUT);
-    gfx_ScaledSprite_NoClip(frame, 0, 0, 2, 2);
     return true;
 }
 
 enum photo_choice { PHOTO_CANCEL, PHOTO_SOLVE, PHOTO_NOTE };
 
 /* Live preview until [enter] takes the picture; then confirm. */
-static enum photo_choice aim_and_snap(gfx_sprite_t *frame) {
+static enum photo_choice aim_and_snap(void) {
     for (;;) {
         bool snapped = false;
         while (!snapped) {
@@ -386,7 +423,7 @@ static enum photo_choice aim_and_snap(gfx_sprite_t *frame) {
                 snapped = true;
                 break;
             }
-            if (draw_preview(frame)) {
+            if (draw_preview()) {
                 bar("ENTER: take picture   CLEAR: back");
             } else {
                 gfx_FillScreen(0);
@@ -403,9 +440,10 @@ static enum photo_choice aim_and_snap(gfx_sprite_t *frame) {
             if (strcmp(reply, "END") == 0) break;
             if (reply[0] == 'S') ok = true;
         }
-        gfx_ScaledSprite_NoClip(frame, 0, 0, 2, 2);
+        /* The last frame is on screen now; write the choices onto it. */
+        gfx_SetDrawScreen();
         bar(ok ? "ENTER solve  Y= note  CLEAR retake" : "Didn't work. CLEAR: try again");
-        gfx_SwapDraw();
+        gfx_SetDrawBuffer();
         for (;;) {
             link_poll();
             uint8_t k = os_GetCSC();
@@ -418,16 +456,11 @@ static enum photo_choice aim_and_snap(gfx_sprite_t *frame) {
 
 static void photo(void) {
     if (!require_link()) return;
-    gfx_sprite_t *frame = gfx_MallocSprite(PREVIEW_W, PREVIEW_H);
-    if (!frame) return;
-    memset(frame->data, 0, PREVIEW_W * PREVIEW_H);
-
     gfx_Begin();
     gray_palette();
     gfx_SetDrawBuffer();
-    enum photo_choice choice = aim_and_snap(frame);
+    enum photo_choice choice = aim_and_snap();
     gfx_End();
-    free(frame);
     clear_screen();
 
     if (choice == PHOTO_CANCEL) return;

@@ -168,6 +168,10 @@ It talks to the dongle over USB the way the calculator does: ping, status, and o
 question to Claude. If the camera's wiring is unknown (as on the W11), upload
 `esp32/tools/camera_probe/` once; it reports which wiring the camera answers on.
 
+`tools/flash_dongle.sh` does the build and upload in one step, and
+`tools/make_desktop_folder.sh` builds a "Claude Calculator" folder on the Desktop with
+everything sorted into numbered folders and double-click helpers.
+
 After that, unplug it from the computer and plug it into the calculator with the OTG
 cable. Start `CLAUDE`, open **Wi-Fi** to join a network, and you're set. The dongle
 remembers up to 5 networks and joins the strongest one in range.
@@ -215,6 +219,9 @@ message per line ending in `\n`, except preview frames, which carry raw pixel by
 | dongle to calculator | `W:<network>` | From `SAVED`: one remembered network |
 | dongle to calculator | `K:<cents>,<state>` | Credit estimate, sent with `CREDIT` and after every answer. Cents is -1 if no balance is set; state 0 ok, 1 low, 2 used up, 3 not set |
 | dongle to calculator | `F:<width>,<height>,<bytes>` | A preview frame; exactly `<bytes>` bytes of 8-bit grayscale pixels follow, then `END` |
+| dongle to calculator | `P:<lines>` | Before an answer: its total length. The first 9 lines follow; the calculator asks for others with `PAGE:<first line>` |
+| calculator to dongle | `PAGE:<n>` | Send 9 lines of the last answer, starting at line n |
+| calculator to dongle | byte 0x18 | Cancel: the dongle stops waiting on Claude and replies `E:Cancelled.` |
 | dongle to calculator | `END` | The reply is complete |
 
 `PHOTO` replies may take 10-60 seconds while Claude reads the picture. The bridge

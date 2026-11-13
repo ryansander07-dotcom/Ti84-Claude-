@@ -20,6 +20,9 @@ namespace {
 
 const char *HOST = "api.anthropic.com";
 
+bool (*cancel_check)() = nullptr;
+bool cancelled() { return cancel_check && cancel_check(); }
+
 const char *SYSTEM_PROMPT =
     "You answer questions for a student using a TI-84 Plus CE graphing calculator.\n"
     "Your reply is shown on its small screen, 26 characters wide and 10 lines tall,\n"
@@ -112,6 +115,7 @@ bool write_all(WiFiClientSecure &client, const char *data, size_t len) {
     uint32_t deadline = millis() + 60000;
     while (len > 0) {
         size_t chunk = len < 4096 ? len : 4096;
+        if (cancelled()) return false;
         size_t n = client.write(reinterpret_cast<const uint8_t *>(data), chunk);
         if (n == 0) {
             if (!client.connected() || millis() > deadline) return false;
@@ -149,6 +153,8 @@ ClaudeReply fail(const char *msg) { return {false, msg}; }
 
 }  // namespace
 
+void claude_set_cancel_check(bool (*check)()) { cancel_check = check; }
+
 ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t jpeg_len) {
     if (strlen(ANTHROPIC_API_KEY) == 0) return fail("No API key on the dongle. Add it to secrets.h and reflash.");
     if (WiFi.status() != WL_CONNECTED) return fail("No Wi-Fi. Pick a network in the Wi-Fi menu.");
@@ -172,6 +178,7 @@ ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t 
 
     if (!write_all(client, headers.data(), headers.size()) || !write_all(client, body.data(), body.size())) {
         client.stop();
+        if (cancelled()) return fail("Cancelled.");
         return fail("Lost the connection while sending. Try again.");
     }
     std::string().swap(body);  // free the photo copy before reading
@@ -181,6 +188,10 @@ ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t 
     uint32_t deadline = millis() + CLAUDE_TIMEOUT_MS;
     uint8_t buf[1024];
     while (client.connected() || client.available()) {
+        if (cancelled()) {
+            client.stop();
+            return fail("Cancelled.");
+        }
         int n = client.available();
         if (n > 0) {
             int got = client.read(buf, n < (int)sizeof buf ? n : (int)sizeof buf);
