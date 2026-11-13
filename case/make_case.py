@@ -432,6 +432,75 @@ CAM_STACKED = CameraBox("stacked")
 CAM_SIDE = CameraBox("side")
 
 
+# ---- thin back plate: covers the whole back of the calculator -----------------------
+# A thin plate that grips the calculator's long edges (like TI's slide cover) with a
+# low, smooth raised area at the top that holds everything laid out flat: the W11
+# board, its camera unfolded beside it on the ribbon, and the battery. The raised
+# area is open on the calculator side, so the parts sit right against the
+# calculator's back and no wall is wasted there. ESTIMATES: the calculator size
+# (TI's published 193 x 87 mm), the edge grip, and the W11 height without the camera.
+CALC_WIDTH = 86.9
+CALC_LENGTH = 192.8
+CALC_CORNER = 9.0
+PLATE_THICKNESS = 1.6     # everywhere except the raised area
+GRIP_DEPTH = 4.0          # how far the side walls reach down the calculator's sides
+GRIP_LIP = 1.0            # the small inward lip that hooks the edge
+W11_FLAT_HEIGHT = 7.0     # W11 + expansion board with the camera unfolded off it (estimate)
+POD_TOP = 1.0             # roof thickness of the raised area
+POD_FROM_TOP = 6.0        # gap between the calculator's top edge and the raised area
+POD_RADIUS = 3.0
+POD_EDGE = 2.0            # wall around the parts
+
+
+class BackPlate:
+    def __init__(self):
+        bw, bl = W11_WIDTH + 2 * CLEARANCE, W11_LENGTH + 2 * CLEARANCE
+        cam = CAMERA_SIZE + 2 * CLEARANCE
+        tw, tl = BATTERY_LENGTH + 2 * CLEARANCE, BATTERY_WIDTH + 2 * CLEARANCE  # battery lies across
+        self.inner_h = max(W11_FLAT_HEIGHT, CAMERA_HEIGHT, BATTERY_THICKNESS) + CLEARANCE
+        self.h = self.inner_h + POD_TOP
+        row1_w = bw + 3.0 + cam
+        self.inner_w = max(row1_w, tw)
+        self.inner_l = bl + 2.0 + tl
+        self.w = self.inner_w + 2 * POD_EDGE
+        self.l = self.inner_l + 2 * POD_EDGE
+        self.cy = CALC_LENGTH / 2 - POD_FROM_TOP - self.l / 2
+        top = self.cy + self.inner_l / 2
+        left = -self.inner_w / 2
+        self.board = (left + bw / 2, top - bl / 2)
+        self.cam = (left + bw + 3.0 + cam / 2, top - bl / 2)
+        self.batt = (0.0, top - bl - 2.0 - tl / 2)
+
+    def body(self):
+        plate = box(CALC_WIDTH, CALC_LENGTH, PLATE_THICKNESS, CALC_CORNER)
+        # Side walls with a small inward lip, down both long edges.
+        for sx in (-1, 1):
+            x_out = sx * (CALC_WIDTH / 2 + 1.2)
+            x_in = sx * CALC_WIDTH / 2
+            wall = cube(min(x_out, x_in), max(x_out, x_in), -CALC_LENGTH / 2 + CALC_CORNER, CALC_LENGTH / 2 - CALC_CORNER,
+                        -GRIP_DEPTH, PLATE_THICKNESS)
+            lip = cube(min(x_in, x_in - sx * GRIP_LIP), max(x_in, x_in - sx * GRIP_LIP),
+                       -CALC_LENGTH / 2 + CALC_CORNER, CALC_LENGTH / 2 - CALC_CORNER, -GRIP_DEPTH, -GRIP_DEPTH + 0.8)
+            plate += wall + lip
+        # The raised area: a smooth low hump, hollow and open toward the calculator.
+        pod = pillow(self.w, self.l, self.h, POD_RADIUS).translate((0, self.cy, 0))
+        pocket = box(self.inner_w, self.inner_l, self.inner_h + 1, 1.0).translate((0, self.cy, -1))
+        body = plate + pod - pocket
+        # Lens window with a recessed ring, over the camera.
+        body -= cylinder(CAM_LENS_WINDOW, -1, self.h + 1, *self.cam)
+        body -= cylinder(CAM_LENS_RING, self.h - 0.5, self.h + 1, *self.cam)
+        # USB-C opening toward the top edge, where the calculator's own port is.
+        bx, by = self.board
+        body -= cube(bx - USB_OPENING_WIDTH / 2, bx + USB_OPENING_WIDTH / 2, by, self.cy + self.l / 2 + 1,
+                     -1, min(W11_FLAT_HEIGHT, self.inner_h))
+        # Channel through the plate so the plug and cable run flat to the top edge.
+        body -= cube(bx - USB_OPENING_WIDTH / 2, bx + USB_OPENING_WIDTH / 2, by, CALC_LENGTH / 2 + 1, -1, PLATE_THICKNESS + 1)
+        return body
+
+
+BACK = BackPlate()
+
+
 # ---- checks ---------------------------------------------------------------------
 
 def check_fit():
@@ -492,6 +561,7 @@ def parts():
         "camera_box/stacked_cover.stl": CAM_STACKED.cover(),
         "camera_box/side_base.stl": CAM_SIDE.base(),
         "camera_box/side_cover.stl": CAM_SIDE.cover(),
+        "back_plate/back_plate.stl": BACK.body().mirror((0, 0, 1)).translate((0, 0, BACK.h)),
     }
 
 
