@@ -111,6 +111,10 @@ up to OS 5.8.4; don't update the OS).
 3. With TI Connect CE, send `arTIfiCE_v2.1.8xp`, `clibs.8xg` and `CLAUDE.8xp` to the
    calculator. On an Apple Silicon Mac, TI Connect CE needs Rosetta
    (`softwareupdate --install-rosetta`).
+   TI Connect CE puts everything in the archive. arTIfiCE (the program **A**) has to be
+   in RAM: on the calculator press **[2nd] [+]** (MEM), **2: Mem Management/Delete**,
+   **Prgm**, move to **A** (it has a `*`, meaning archived) and press **[enter]** so the
+   `*` goes away. CLAUDE and the libraries can stay archived.
 4. On the calculator: press **[prgm]**, choose **TI-Basic** if it asks, pick the first
    program, **A** (that's arTIfiCE), and press **[enter]** twice. In the arTIfiCE menu
    that opens, pick **CLAUDE** and press **[enter]**. Press **[mode]** to leave the
