@@ -36,7 +36,7 @@ One-time setup: put your API key (and, optionally, your home Wi-Fi) in
   acts as the USB host and powers the dongle.
 - An EEMB 402535 LiPo (3.7 V, 320 mAh) on the board's battery pads, so Wi-Fi never
   browns out the calculator's USB port. The calculator recharges it.
-- A 3D-printed battery door that holds all of it; see [case/README.md](case/README.md).
+- A 3D-printed case; see [case/README.md](case/README.md) for the three versions.
 
 ## What's here
 
@@ -45,7 +45,7 @@ One-time setup: put your API key (and, optionally, your home Wi-Fi) in
 | `bridge/` | Python program that stands in for the dongle on your computer, for testing | Ready to test |
 | `calculator/` | `CLAUDE` program for the calculator (CE C toolchain) | Compiles; not yet run on a calculator |
 | `esp32/ti84_dongle/` | Dongle firmware for the XIAO ESP32S3 Sense (Arduino) | Compiles; not yet run on the board |
-| `case/` | 3D-printable battery door that holds the dongle and its battery | Door sizes need measuring |
+| `case/` | 3D-printable cases: an always-on battery door, a clip-on door with a magnetic pod, and a mini box without a camera | Door sizes need measuring |
 | `tests/` | Bridge tests, plus a check that the dongle's C++ text cleanup matches the Python one | |
 
 ## Step 1: test your API key with the bridge

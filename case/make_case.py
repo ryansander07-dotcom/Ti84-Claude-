@@ -1,21 +1,32 @@
-"""Build the 3D-printable battery door that holds the dongle and its battery.
+"""Build the 3D-printable cases for the TI-84 Plus CE dongle.
 
     .venv/bin/python case/make_case.py
 
-Everything stays inside the outline of the original battery door. The door has two
-raised compartments side by side: a tall one for the XIAO ESP32S3 Sense (its camera
-looks out through the lid) and a low one for a flat EEMB 402535 LiPo.
+Three cases. The two battery doors use the same smooth, low cover: one rounded
+shell the size of the battery door with a round lens window. Inside, the XIAO
+ESP32S3 Sense lies flat with its camera unfolded beside it (not stacked on top),
+next to a flat LiPo. The door plate is the same thickness as the original, so it
+sits flush with the calculator.
 
-Writes four STL files to case/stl/:
+  stl/always_on/   Screw it on and leave it.
+      door_base.stl     the door, with a rim the cover presses onto
+      cover.stl         the smooth shell with the lens window
 
-  fit_test.stl       Just the door plate. Print this first (about 10 minutes) and
-                     check it fits the calculator before printing the rest.
-  door_body.stl      The door with both compartments.
-  lid_camera.stl     Closes the XIAO compartment; has the camera window.
-  lid_battery.stl    Closes the battery compartment.
+  stl/clip_on/     Screw the door on once; the dongle pod snaps on with magnets and
+                   pulls straight off.
+      door_magnets.stl  flat door with four low magnet bosses that locate the pod
+      pod_base.stl      the pod's floor, with matching sockets and magnets
+      cover.stl         the same smooth shell
 
-Every size is in millimeters. The DOOR_ values are estimates: measure your own
-battery door with calipers and change them before printing (see case/README.md).
+  stl/mini/        No camera, no battery door: a small box for a plain XIAO ESP32S3
+                   that hangs off the USB cable. Powered by the calculator.
+      mini_base.stl, mini_cover.stl
+
+  stl/fit_test.stl  Just the door plate. Print this first (about 10 minutes) and
+                    check it fits before printing a door.
+
+Every size is in millimeters. The DOOR_ values and the XIAO stack height are
+estimates: measure yours and change them before printing (see case/README.md).
 
 Axes: X runs across the calculator, Y runs along it (+Y points toward the screen
 and the USB port), Z points out of the back of the calculator.
@@ -30,9 +41,9 @@ from manifold3d import CrossSection, Manifold
 # ---- measure these on your calculator's battery door ------------------------
 DOOR_WIDTH = 62.0         # across the calculator (X)
 DOOR_LENGTH = 52.0        # along the calculator (Y)
-DOOR_THICKNESS = 1.6      # the flat part of the door
+DOOR_THICKNESS = 1.6      # the flat part of the door; keeps the door flush
 DOOR_CORNER_RADIUS = 2.0
-EDGE_MARGIN = 1.5         # keep compartments this far inside the door edge
+EDGE_MARGIN = 1.0         # the cover stays this far inside the door edge
 TAB_WIDTH = 20.0          # tongue on the top edge that slides under the case
 TAB_LENGTH = 3.0          # how far it sticks out past the door edge
 TAB_THICKNESS = 0.9
@@ -41,31 +52,51 @@ SCREW_X = 0.0             # 0 = centered left to right
 SCREW_HOLE = 2.2          # fits the original screw
 SCREW_HEAD = 4.6          # counterbore for the screw head
 
-# ---- the XIAO ESP32S3 Sense -------------------------------------------------
+# ---- the XIAO ESP32S3 Sense, camera unfolded beside it -------------------------
 BOARD_WIDTH = 17.8        # X
 BOARD_LENGTH = 21.0       # Y; the USB-C port faces +Y
-BOARD_HEIGHT = 15.0       # with the camera board stacked on, to the top of the lens
-LENS_FROM_CENTER = 0.0    # where the lens sits along Y, from the board's center
+STACK_HEIGHT = 9.0        # XIAO + expansion board, without the camera on top (estimate)
+CAMERA_SIZE = 8.5         # the square camera module
+CAMERA_HEIGHT = 5.5       # module plus lens barrel
+CAMERA_GAP = 3.0          # room for the folded ribbon between board and camera
 
 # ---- the battery: EEMB 402535, 3.7 V 320 mAh ----------------------------------
 BATTERY_WIDTH = 25.5      # X
 BATTERY_LENGTH = 36.0     # Y, including the protection circuit at the wire end
 BATTERY_THICKNESS = 4.3
 
-# ---- walls and lids -----------------------------------------------------------
-CLEARANCE = 0.3           # gap around the board and the battery on each side
-WALL = 1.2
+# ---- cover ----------------------------------------------------------------------
+CLEARANCE = 0.4           # around each part inside
+COVER_WALL = 1.4
+COVER_TOP = 1.4
+COVER_RADIUS = 4.0        # rounding of the cover's corners and top edges
+LIP_HEIGHT = 2.5          # rim on the base the cover presses over
+LIP_WALL = 1.2
+LIP_FIT = 0.15            # gap between the rim and the cover's inside wall
+LOCATOR_HEIGHT = 1.5      # low ribs that keep the parts in place
+LENS_WINDOW = 7.5         # hole over the lens
+LENS_RING = 11.0          # shallow recessed ring around it, for looks
 USB_OPENING_WIDTH = 12.5  # fits a USB-C plug with its plastic overmold
-USB_OPENING_HEIGHT = 7.5
-WIRE_SLOT = 4.0           # passage between the compartments for the battery wires
-LENS_WINDOW = 10.0        # diameter; generous so the lens doesn't need to be exact
-LID_THICKNESS = 1.2
-LID_LIP = 1.6             # how far each lid's lip reaches into its compartment
-LID_FIT = 0.15            # gap between a lip and the walls
+
+# ---- clip-on magnets: 6 x 2 mm N52 discs, four pairs ------------------------------
+MAGNET_DIAMETER = 6.0
+MAGNET_THICKNESS = 2.0
+MAGNET_FIT = 0.15         # extra room in each pocket; a drop of glue holds them
+BOSS_DIAMETER = 9.0       # bosses on the door that locate the pod
+BOSS_HEIGHT = 1.4
+BOSS_FIT = 0.2
+MAGNET_INSET = 7.0        # boss centers from the cover's edges
+
+# ---- mini: plain XIAO ESP32S3, no camera ------------------------------------------
+MINI_BOARD_HEIGHT = 4.5   # board plus the USB-C port and shield on top
+MINI_FLOOR = 1.2
+MINI_STANDOFF = 1.0       # the board rests on ledges, clear of the pads underneath
 
 SEGMENTS = 64
 OUT = Path(__file__).resolve().parent / "stl"
 
+
+# ---- shapes -------------------------------------------------------------------
 
 def rounded_rect(width, length, radius):
     radius = max(0.01, min(radius, width / 2 - 0.01, length / 2 - 0.01))
@@ -89,45 +120,41 @@ def cylinder(diameter, z0, z1, x=0.0, y=0.0):
     return Manifold.cylinder(z1 - z0, diameter / 2, diameter / 2, SEGMENTS).translate((x, y, z0))
 
 
-# Compartment sizes. The XIAO compartment is on the left (-X), the battery
-# compartment on the right, sharing one wall, both against the top (+Y) edge.
-XIAO_W = BOARD_WIDTH + 2 * CLEARANCE
-XIAO_L = BOARD_LENGTH + 2 * CLEARANCE
-XIAO_H = BOARD_HEIGHT + 0.3 + LID_LIP  # the lid's lip stays above the board
-BATT_W = BATTERY_WIDTH + 2 * CLEARANCE
-BATT_L = BATTERY_LENGTH + 2 * CLEARANCE
-BATT_H = BATTERY_THICKNESS + 0.3 + LID_LIP
+def pillow(width, length, height, radius):
+    """A box with a flat bottom and every top edge and corner rounded."""
+    r = min(radius, height - 0.01, width / 2 - 0.01, length / 2 - 0.01)
+    parts = []
+    for x in (-width / 2 + r, width / 2 - r):
+        for y in (-length / 2 + r, length / 2 - r):
+            parts.append(Manifold.cylinder(height - r, r, r, SEGMENTS).translate((x, y, 0)))
+            parts.append(Manifold.sphere(r, SEGMENTS).translate((x, y, height - r)))
+    return Manifold.batch_hull(parts)
 
-TOTAL_W = XIAO_W + BATT_W + 3 * WALL
-TOP_Y = DOOR_LENGTH / 2 - EDGE_MARGIN
-LEFT_X = -TOTAL_W / 2
-SHARED_X = LEFT_X + WALL + XIAO_W          # left face of the shared wall
-BATT_X = SHARED_X + WALL                   # left face of the battery cavity
-RIGHT_X = BATT_X + BATT_W + WALL
 
-XIAO_CX = LEFT_X + WALL + XIAO_W / 2
-XIAO_CY = TOP_Y - WALL - XIAO_L / 2
-BATT_CX = BATT_X + BATT_W / 2
-BATT_CY = TOP_Y - WALL - BATT_L / 2
+def shell(width, length, inner_h, radius):
+    """Rounded cover, right way up, open at the bottom."""
+    outer = pillow(width, length, inner_h + COVER_TOP, radius)
+    inner = pillow(width - 2 * COVER_WALL, length - 2 * COVER_WALL, inner_h,
+                   max(radius - COVER_WALL, 0.6)).translate((0, 0, -0.01))
+    return outer - inner
+
+
+def rim(inner_w, inner_l, radius):
+    """The ring on a base that the cover presses over."""
+    w, l = inner_w - 2 * LIP_FIT, inner_l - 2 * LIP_FIT
+    r = max(radius - COVER_WALL, 0.6)
+    return box(w, l, LIP_HEIGHT, r) - box(w - 2 * LIP_WALL, l - 2 * LIP_WALL, LIP_HEIGHT + 2,
+                                          max(r - LIP_WALL, 0.3)).translate((0, 0, -1))
+
+
+def print_top_down(part, height):
+    """Flip a cover so its flat top is on the print bed."""
+    return part.mirror((0, 0, 1)).translate((0, 0, height))
+
+
+# ---- the door plate -----------------------------------------------------------
 
 SCREW_Y = -DOOR_LENGTH / 2 + SCREW_FROM_BOTTOM
-
-
-def check_fit():
-    problems = []
-    if TOTAL_W > DOOR_WIDTH - 2 * EDGE_MARGIN:
-        problems.append(f"the compartments are {TOTAL_W:.1f} mm wide but the door only has "
-                        f"{DOOR_WIDTH - 2 * EDGE_MARGIN:.1f} mm")
-    length = max(XIAO_L, BATT_L) + 2 * WALL
-    if length > DOOR_LENGTH - 2 * EDGE_MARGIN:
-        problems.append(f"the battery compartment is {length:.1f} mm long but the door only has "
-                        f"{DOOR_LENGTH - 2 * EDGE_MARGIN:.1f} mm")
-    bottom = TOP_Y - length
-    if SCREW_Y + SCREW_HEAD / 2 > bottom and LEFT_X < SCREW_X + SCREW_HEAD / 2 and SCREW_X - SCREW_HEAD / 2 < RIGHT_X:
-        problems.append("the compartments would cover the screw")
-    if problems:
-        raise SystemExit("Doesn't fit: " + "; ".join(problems) +
-                         ". Check the DOOR_ measurements, or pick a smaller battery.")
 
 
 def door_plate():
@@ -138,53 +165,161 @@ def door_plate():
     return plate + tab - hole - head
 
 
-def door_body():
-    z0 = DOOR_THICKNESS
-    xiao_outer = box(XIAO_W + 2 * WALL, XIAO_L + 2 * WALL, z0 + XIAO_H, 2.0).translate((XIAO_CX, XIAO_CY, 0))
-    batt_outer = box(BATT_W + 2 * WALL, BATT_L + 2 * WALL, z0 + BATT_H, 2.0).translate((BATT_CX, BATT_CY, 0))
-    xiao_cavity = box(XIAO_W, XIAO_L, XIAO_H + 1, 0.6).translate((XIAO_CX, XIAO_CY, z0))
-    batt_cavity = box(BATT_W, BATT_L, BATT_H + 1, 0.6).translate((BATT_CX, BATT_CY, z0))
+# ---- what goes inside the door cover ----------------------------------------------
+# "Inside" coordinates: z = 0 is the floor the parts sit on.
 
-    # USB-C opening in the XIAO compartment's top (+Y) wall, from the floor up.
-    usb = cube(XIAO_CX - USB_OPENING_WIDTH / 2, XIAO_CX + USB_OPENING_WIDTH / 2,
-               TOP_Y - WALL - 1, TOP_Y + 1, z0, z0 + USB_OPENING_HEIGHT)
-    # Battery wires pass through the shared wall at floor level, near the top end.
-    wires = cube(SHARED_X - 1, BATT_X + 1, TOP_Y - WALL - 2 - WIRE_SLOT, TOP_Y - WALL - 2, z0, z0 + 3)
-    # Vent slots on the outer side of the XIAO compartment; Wi-Fi makes it warm.
-    vents = Manifold()
+COVER_W = DOOR_WIDTH - 2 * EDGE_MARGIN
+COVER_L = DOOR_LENGTH - 2 * EDGE_MARGIN
+INNER_W = COVER_W - 2 * COVER_WALL
+INNER_L = COVER_L - 2 * COVER_WALL
+INNER_H = max(STACK_HEIGHT, BATTERY_THICKNESS, CAMERA_HEIGHT) + CLEARANCE
+COVER_H = INNER_H + COVER_TOP
+
+# XIAO in the top-left corner (USB-C against the top wall), camera below it,
+# battery on the right.
+XIAO_W, XIAO_L = BOARD_WIDTH + 2 * CLEARANCE, BOARD_LENGTH + 2 * CLEARANCE
+BATT_W, BATT_L = BATTERY_WIDTH + 2 * CLEARANCE, BATTERY_LENGTH + 2 * CLEARANCE
+GAP = 2.0
+GROUP_W = XIAO_W + GAP + BATT_W
+XIAO_X0 = -GROUP_W / 2
+XIAO_CX = XIAO_X0 + XIAO_W / 2
+XIAO_CY = INNER_L / 2 - LIP_WALL - XIAO_L / 2
+CAM_CX = XIAO_CX
+CAM_CY = XIAO_CY - XIAO_L / 2 - CAMERA_GAP - CAMERA_SIZE / 2
+BATT_CX = XIAO_X0 + XIAO_W + GAP + BATT_W / 2
+BATT_CY = INNER_L / 2 - LIP_WALL - BATT_L / 2
+
+
+def usb_cut(z0, z1, inner_l, outer_l, cx):
+    return cube(cx - USB_OPENING_WIDTH / 2, cx + USB_OPENING_WIDTH / 2, inner_l / 2 - 3, outer_l / 2 + 1, z0, z1)
+
+
+def cover():
+    c = shell(COVER_W, COVER_L, INNER_H, COVER_RADIUS)
+    # Lens window with a shallow recessed ring around it.
+    c -= cylinder(LENS_WINDOW, -1, COVER_H + 1, CAM_CX, CAM_CY)
+    c -= cylinder(LENS_RING, COVER_H - 0.6, COVER_H + 1, CAM_CX, CAM_CY)
+    # USB-C opening in the top wall, up the height of the board stack.
+    c -= usb_cut(-1, min(STACK_HEIGHT, INNER_H - 1), INNER_L, COVER_L, XIAO_CX)
+    # Vent slots over the XIAO; Wi-Fi makes it warm.
     for i in range(3):
-        y = XIAO_CY - 5 + i * 5
-        vents += cube(LEFT_X - 1, LEFT_X + WALL + 1, y - 0.6, y + 0.6, z0 + 5, z0 + XIAO_H - LID_LIP - 1.5)
-
-    shell = (xiao_outer + batt_outer) - xiao_cavity - batt_cavity - usb - wires - vents
-    return door_plate() + shell
+        x = XIAO_CX - 4 + i * 4
+        c -= cube(x - 0.6, x + 0.6, XIAO_CY - 5, XIAO_CY + 5, INNER_H - 1, COVER_H + 1)
+    return print_top_down(c, COVER_H)
 
 
-def make_lid(x0, x1, y0, y1, cavity_w, cavity_l, cavity_cx, cavity_cy, window=None):
-    """A lid covering [x0, x1] x [y0, y1], printed upside down: outer face on the
-    bed (z = 0) and the lip pointing up."""
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    top = box(x1 - x0, y1 - y0, LID_THICKNESS, 1.5)
-    lip_w, lip_l = cavity_w - 2 * LID_FIT, cavity_l - 2 * LID_FIT
-    lip = box(lip_w, lip_l, LID_LIP, 0.5) - box(lip_w - 2.4, lip_l - 2.4, LID_LIP + 2, 0.3).translate((0, 0, -1))
-    lid = top + lip.translate((cavity_cx - cx, cavity_cy - cy, LID_THICKNESS))
-    if window is not None:
-        lid -= cylinder(LENS_WINDOW, -1, LID_THICKNESS + LID_LIP + 1, window[0] - cx, window[1] - cy)
-    # A small notch on the top (+Y) edge shows which way round the lid goes.
-    lid -= cube(-1.5, 1.5, (y1 - y0) / 2 - 1, (y1 - y0) / 2 + 1, -1, 0.5)
-    # Mirror in X because it prints upside down.
-    return lid.mirror((1, 0, 0))
+def corner_ribs(cx, cy, w, l):
+    ribs = Manifold()
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            x, y = cx + sx * (w / 2 + 0.6), cy + sy * (l / 2 + 0.6)
+            ribs += cube(min(x, x - sx * 5), max(x, x - sx * 5), y - 0.6, y + 0.6, 0, LOCATOR_HEIGHT)
+            ribs += cube(x - 0.6, x + 0.6, min(y, y - sy * 5), max(y, y - sy * 5), 0, LOCATOR_HEIGHT)
+    return ribs
 
 
-def lid_camera():
-    return make_lid(LEFT_X, SHARED_X + WALL, TOP_Y - XIAO_L - 2 * WALL, TOP_Y,
-                    XIAO_W, XIAO_L, XIAO_CX, XIAO_CY, window=(XIAO_CX, XIAO_CY + LENS_FROM_CENTER))
+def inside_features():
+    """Rim, low ribs around the XIAO and battery, and the camera pedestal."""
+    r = rim(INNER_W, INNER_L, COVER_RADIUS) - usb_cut(-1, LIP_HEIGHT + 1, INNER_L, COVER_L, XIAO_CX)
+    ribs = corner_ribs(XIAO_CX, XIAO_CY, XIAO_W, XIAO_L) + corner_ribs(BATT_CX, BATT_CY, BATT_W, BATT_L)
+    # The camera sits on a pedestal so the lens reaches the window, in a shallow pocket.
+    pedestal_h = INNER_H - CAMERA_HEIGHT - 0.2
+    pocket = CAMERA_SIZE + 0.4
+    pedestal = box(pocket + 2.4, pocket + 2.4, pedestal_h + 1.0, 0.8)
+    pedestal -= box(pocket, pocket, 2, 0.3).translate((0, 0, pedestal_h))
+    return r + ribs + pedestal.translate((CAM_CX, CAM_CY, 0))
 
 
-def lid_battery():
-    # The shared wall belongs to the taller XIAO compartment, so this lid starts after it.
-    return make_lid(BATT_X, RIGHT_X, TOP_Y - BATT_L - 2 * WALL, TOP_Y, BATT_W, BATT_L, BATT_CX, BATT_CY)
+# ---- always-on door ----------------------------------------------------------------
 
+def always_on_base():
+    return door_plate() + inside_features().translate((0, 0, DOOR_THICKNESS))
+
+
+# ---- clip-on door and pod ------------------------------------------------------------
+
+MAGNET_POCKET = MAGNET_DIAMETER + 2 * MAGNET_FIT
+MAGNET_DEPTH = MAGNET_THICKNESS + 0.1
+SOCKET_DEPTH = BOSS_HEIGHT + BOSS_FIT
+POD_FLOOR = SOCKET_DEPTH + MAGNET_DEPTH + 0.6
+
+
+def magnet_spots():
+    xs = (-COVER_W / 2 + MAGNET_INSET, COVER_W / 2 - MAGNET_INSET)
+    ys = (-COVER_L / 2 + MAGNET_INSET, COVER_L / 2 - MAGNET_INSET)
+    return [(x, y) for x in xs for y in ys]
+
+
+def clip_door():
+    door = door_plate()
+    top = DOOR_THICKNESS + BOSS_HEIGHT
+    for x, y in magnet_spots():
+        door += cylinder(BOSS_DIAMETER, DOOR_THICKNESS - 0.01, top, x, y)
+    for x, y in magnet_spots():
+        door -= cylinder(MAGNET_POCKET, top - MAGNET_DEPTH, top + 1, x, y)
+    return door
+
+
+def pod_base():
+    """The pod's floor, printed bottom-down. The cover's edge lands on it."""
+    floor = box(COVER_W, COVER_L, POD_FLOOR, COVER_RADIUS)
+    for x, y in magnet_spots():
+        floor -= cylinder(BOSS_DIAMETER + 2 * BOSS_FIT, -1, SOCKET_DEPTH, x, y)
+        floor -= cylinder(MAGNET_POCKET, SOCKET_DEPTH - 0.01, SOCKET_DEPTH + MAGNET_DEPTH, x, y)
+    return floor + inside_features().translate((0, 0, POD_FLOOR))
+
+
+# ---- mini box: plain XIAO ESP32S3, no camera -------------------------------------------
+
+MINI_INNER_W = BOARD_WIDTH + 2 * CLEARANCE + 2 * LIP_WALL + 2 * LIP_FIT
+MINI_INNER_L = BOARD_LENGTH + 2 * CLEARANCE + 2 * LIP_WALL + 2 * LIP_FIT
+MINI_W = MINI_INNER_W + 2 * COVER_WALL
+MINI_L = MINI_INNER_L + 2 * COVER_WALL
+MINI_INNER_H = MINI_STANDOFF + MINI_BOARD_HEIGHT + CLEARANCE
+MINI_RADIUS = 3.0
+
+
+def mini_base():
+    base = box(MINI_W, MINI_L, MINI_FLOOR, MINI_RADIUS)
+    r = rim(MINI_INNER_W, MINI_INNER_L, MINI_RADIUS)
+    # Ledges under the board's long edges keep it level and off its bottom pads.
+    ledges = Manifold()
+    for sx in (-1, 1):
+        x = sx * (BOARD_WIDTH / 2 - 0.6)
+        ledges += cube(x - 1.0, x + 1.0, -BOARD_LENGTH / 2 + 1, BOARD_LENGTH / 2 - 1, 0, MINI_STANDOFF)
+    inside = (r + ledges) - usb_cut(-1, LIP_HEIGHT + 1, MINI_INNER_L, MINI_L, 0)
+    return base + inside.translate((0, 0, MINI_FLOOR))
+
+
+def mini_cover():
+    c = shell(MINI_W, MINI_L, MINI_INNER_H, MINI_RADIUS)
+    c -= usb_cut(-1, MINI_STANDOFF + MINI_BOARD_HEIGHT, MINI_INNER_L, MINI_L, 0)
+    for i in range(3):  # vents
+        x = -4 + i * 4
+        c -= cube(x - 0.6, x + 0.6, -5, 5, MINI_INNER_H - 1, MINI_INNER_H + COVER_TOP + 1)
+    return print_top_down(c, MINI_INNER_H + COVER_TOP)
+
+
+# ---- checks ---------------------------------------------------------------------
+
+def check_fit():
+    problems = []
+    room_w = INNER_W - 2 * LIP_WALL
+    if GROUP_W > room_w:
+        problems.append(f"the XIAO and battery need {GROUP_W:.1f} mm across, the cover has {room_w:.1f} mm")
+    need_l = max(XIAO_L + CAMERA_GAP + CAMERA_SIZE + 1.2, BATT_L)
+    room_l = INNER_L - 2 * LIP_WALL
+    if need_l > room_l:
+        problems.append(f"the parts need {need_l:.1f} mm of length, the cover has {room_l:.1f} mm")
+    for x, y in magnet_spots():
+        if (x - SCREW_X) ** 2 + (y - SCREW_Y) ** 2 < ((BOSS_DIAMETER + SCREW_HEAD) / 2 + 1) ** 2:
+            problems.append("a magnet boss would cover the screw; change MAGNET_INSET")
+    if problems:
+        raise SystemExit("Doesn't fit: " + "; ".join(problems) +
+                         ". Check the DOOR_ measurements, or pick a smaller battery.")
+
+
+# ---- output ---------------------------------------------------------------------
 
 def write_stl(manifold, path):
     mesh = manifold.to_mesh()
@@ -201,20 +336,37 @@ def write_stl(manifold, path):
         record["n"] = normals
         record["v"] = np.hstack([a, b, c])
         f.write(record.tobytes())
-    lo, hi = manifold.bounding_box()[:3], manifold.bounding_box()[3:]
-    size = " x ".join(f"{h - l:.1f}" for l, h in zip(lo, hi))
-    print(f"{path.name:20s} {size} mm, {manifold.volume() / 1000:.1f} cm^3")
+    bb = manifold.bounding_box()
+    size = " x ".join(f"{h - l:.1f}" for l, h in zip(bb[:3], bb[3:]))
+    print(f"{str(path.relative_to(OUT)):28s} {size} mm")
+
+
+def parts():
+    return {
+        "fit_test.stl": door_plate(),
+        "always_on/door_base.stl": always_on_base(),
+        "always_on/cover.stl": cover(),
+        "clip_on/door_magnets.stl": clip_door(),
+        "clip_on/pod_base.stl": pod_base(),
+        "clip_on/cover.stl": cover(),
+        "mini/mini_base.stl": mini_base(),
+        "mini/mini_cover.stl": mini_cover(),
+    }
 
 
 def main():
-    OUT.mkdir(exist_ok=True)
     check_fit()
-    parts = {"fit_test.stl": door_plate(), "door_body.stl": door_body(),
-             "lid_camera.stl": lid_camera(), "lid_battery.stl": lid_battery()}
-    for name, part in parts.items():
-        if part.status().name != "NoError" or part.is_empty():
-            raise SystemExit(f"{name}: geometry error {part.status()}")
-        write_stl(part, OUT / name)
+    for old in OUT.rglob("*.stl"):
+        old.unlink()  # clear files from earlier layouts
+    for name, part in parts().items():
+        if part.status().name != "NoError" or part.is_empty() or len(part.decompose()) != 1:
+            raise SystemExit(f"{name}: geometry problem ({part.status()}, {len(part.decompose())} pieces)")
+        path = OUT / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write_stl(part, path)
+    print(f"Always-on door: sticks out {COVER_H:.1f} mm from the calculator.")
+    print(f"Clip-on door alone: {BOSS_HEIGHT:.1f} mm bosses; with the pod on: {POD_FLOOR + COVER_H:.1f} mm.")
+    print(f"Mini box: {MINI_W:.1f} x {MINI_L:.1f} x {MINI_FLOOR + MINI_INNER_H + COVER_TOP:.1f} mm.")
 
 
 if __name__ == "__main__":
