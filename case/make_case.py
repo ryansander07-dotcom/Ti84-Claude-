@@ -101,7 +101,7 @@ MAGNET_INSET = 6.5        # boss centers from the cover's edges
 # ---- mini: plain XIAO ESP32S3, no camera ------------------------------------------
 MINI_BOARD_HEIGHT = 4.5   # board plus the USB-C port and shield on top
 MINI_FLOOR = 1.2
-MINI_STANDOFF = 1.0       # the board rests on ledges, clear of the pads underneath
+MINI_TAPE = 0.5           # foam tape between the battery and the board
 
 SEGMENTS = 64
 OUT = Path(__file__).resolve().parent / "stl"
@@ -299,32 +299,45 @@ def pod_base():
 
 # ---- mini box: plain XIAO ESP32S3, no camera -------------------------------------------
 
-MINI_INNER_W = BOARD_WIDTH + 2 * CLEARANCE + 2 * LIP_WALL + 2 * LIP_FIT
-MINI_INNER_L = BOARD_LENGTH + 2 * CLEARANCE + 2 * LIP_WALL + 2 * LIP_FIT
+# The battery lies flat on the floor; the board lies on it (on a layer of foam
+# tape), USB-C at the +Y end. Guide rails hanging from the cover keep the board
+# from sliding.
+MINI_CAVITY_W = BATTERY_WIDTH + 2 * CLEARANCE
+MINI_CAVITY_L = BATTERY_LENGTH + 2 * CLEARANCE
+MINI_INNER_W = MINI_CAVITY_W + 2 * LIP_WALL + 2 * LIP_FIT
+MINI_INNER_L = MINI_CAVITY_L + 2 * LIP_WALL + 2 * LIP_FIT
 MINI_W = MINI_INNER_W + 2 * COVER_WALL
 MINI_L = MINI_INNER_L + 2 * COVER_WALL
-MINI_INNER_H = MINI_STANDOFF + MINI_BOARD_HEIGHT + CLEARANCE
+MINI_BOARD_Z = BATTERY_THICKNESS + MINI_TAPE         # bottom of the board, above the floor
+MINI_INNER_H = MINI_BOARD_Z + MINI_BOARD_HEIGHT + CLEARANCE
+MINI_BOARD_CY = MINI_CAVITY_L / 2 - BOARD_LENGTH / 2 - CLEARANCE
 MINI_RADIUS = 3.0
 
 
 def mini_base():
     base = box(MINI_W, MINI_L, MINI_FLOOR, MINI_RADIUS)
     r = rim(MINI_INNER_W, MINI_INNER_L, MINI_RADIUS)
-    # Ledges under the board's long edges keep it level and off its bottom pads.
-    ledges = Manifold()
-    for sx in (-1, 1):
-        x = sx * (BOARD_WIDTH / 2 - 0.6)
-        ledges += cube(x - 1.0, x + 1.0, -BOARD_LENGTH / 2 + 1, BOARD_LENGTH / 2 - 1, 0, MINI_STANDOFF)
-    inside = (r + ledges) - usb_cut(-1, LIP_HEIGHT + 1, MINI_INNER_L, MINI_L, 0)
-    return base + inside.translate((0, 0, MINI_FLOOR))
+    return base + r.translate((0, 0, MINI_FLOOR))
 
 
 def mini_cover():
     c = shell(MINI_W, MINI_L, MINI_INNER_H, MINI_RADIUS)
-    c -= usb_cut(-1, MINI_STANDOFF + MINI_BOARD_HEIGHT, MINI_INNER_L, MINI_L, 0)
-    for i in range(3):  # vents
+    # USB-C notch in the +Y wall, open at the top, so the plug's plastic overmold
+    # can pass the wall and the plug seats fully.
+    c -= cube(-USB_OPENING_WIDTH / 2, USB_OPENING_WIDTH / 2, MINI_BOARD_CY + BOARD_LENGTH / 2 - 0.5, MINI_L / 2 + 1,
+              MINI_BOARD_Z - 1.5, MINI_INNER_H + COVER_TOP + 1)
+    # Rails down each long side of the board and a stop at its far end, hanging
+    # from the top. They end above the battery.
+    rail_z0 = MINI_BOARD_Z + 1.0
+    y0, y1 = MINI_BOARD_CY - BOARD_LENGTH / 2, MINI_BOARD_CY + BOARD_LENGTH / 2
+    for sx in (-1, 1):
+        x = sx * (BOARD_WIDTH / 2 + CLEARANCE + 0.6)
+        c += cube(x - 0.6, x + 0.6, y0 + 2, y1 - 2, rail_z0, MINI_INNER_H + 0.01)
+    c += cube(-5, 5, y0 - CLEARANCE - 1.2, y0 - CLEARANCE, rail_z0, MINI_INNER_H + 0.01)
+    # Vents over the board.
+    for i in range(3):
         x = -4 + i * 4
-        c -= cube(x - 0.6, x + 0.6, -5, 5, MINI_INNER_H - 1, MINI_INNER_H + COVER_TOP + 1)
+        c -= cube(x - 0.6, x + 0.6, MINI_BOARD_CY - 5, MINI_BOARD_CY + 5, MINI_INNER_H - 1, MINI_INNER_H + COVER_TOP + 1)
     return print_top_down(c, MINI_INNER_H + COVER_TOP)
 
 
