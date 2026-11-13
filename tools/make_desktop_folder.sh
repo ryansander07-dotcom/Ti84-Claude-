@@ -101,6 +101,7 @@ cp "$REPO"/case/renders/camera_plate-*.png "$P/Pictures/"
 W="$OUT/5 - Wiring and parts"
 mkdir -p "$W"
 cp "$REPO/case/README.md" "$W/Cases, parts and wiring.md"
+cp "$REPO/case/wiring_diagram.png" "$W/Wiring diagram.png"
 cp "$REPO/README.md" "$W/Full project README.md"
 
 cp "$REPO/tools/START HERE.txt" "$OUT/START HERE.txt"

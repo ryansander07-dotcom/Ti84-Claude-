@@ -92,6 +92,8 @@ better in a hot car or backpack. White or light gray matches the calculator's ba
 
 ## Assemble
 
+![wiring](wiring_diagram.png)
+
 **Doors (both versions)**
 
 1. Solder the battery: cut its connector off, then red to **B+** and black to **B−** on
