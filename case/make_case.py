@@ -479,20 +479,31 @@ PLATE_THICKNESS = 1.6     # everywhere except the raised area
 GRIP_DEPTH = 4.0          # how far the side walls reach down the calculator's sides
 GRIP_LIP = 1.0            # the small inward lip that hooks the edge
 W11_FLAT_HEIGHT = 7.0     # W11 + expansion board with the camera unfolded off it (estimate)
+BACK_FOAM = 1.0           # foam pad under the board; lifts the USB-C so the plug clears the calculator
+USB_CENTER = 2.6          # USB-C center above the bottom of the W11 board
+PLUG_HEIGHT = 6.5         # a USB-C plug's plastic overmold, top to bottom
+CAM_COLLAR = 3.0          # square collar under the roof that holds the camera up at the window
 POD_TOP = 1.0             # roof thickness of the raised area
 POD_FROM_TOP = 6.0        # gap between the calculator's top edge and the raised area
 POD_RADIUS = 3.0
 POD_EDGE = 2.0            # wall around the parts
+BACK_SWITCH_CZ = 3.0      # switch center height above the calculator's back; the lever clears the plate
 
 
 class BackPlate:
+    """Raised area layout, looking at the back with the calculator's top edge up:
+    top row: W11 board (USB-C pointing at the top edge), camera beside it, power
+    switch against the right wall; bottom row: the battery, lying across, with the
+    Wi-Fi antenna stuck under the roof above it."""
+
     def __init__(self):
         bw, bl = W11_WIDTH + 2 * CLEARANCE, W11_LENGTH + 2 * CLEARANCE
         cam = CAMERA_SIZE + 2 * CLEARANCE
         tw, tl = BATTERY_LENGTH + 2 * CLEARANCE, BATTERY_WIDTH + 2 * CLEARANCE  # battery lies across
-        self.inner_h = max(W11_FLAT_HEIGHT, CAMERA_HEIGHT, BATTERY_THICKNESS) + CLEARANCE
+        self.inner_h = max(BACK_FOAM + W11_FLAT_HEIGHT, CAMERA_HEIGHT, BATTERY_THICKNESS) + CLEARANCE
         self.h = self.inner_h + POD_TOP
-        row1_w = bw + 3.0 + cam
+        sw_room = 1.0 + SWITCH_DEPTH + SWITCH_PINS
+        row1_w = bw + 3.0 + cam + sw_room
         self.inner_w = max(row1_w, tw)
         self.inner_l = bl + 2.0 + tl
         self.w = self.inner_w + 2 * POD_EDGE
@@ -500,9 +511,14 @@ class BackPlate:
         self.cy = CALC_LENGTH / 2 - POD_FROM_TOP - self.l / 2
         top = self.cy + self.inner_l / 2
         left = -self.inner_w / 2
-        self.board = (left + bw / 2, top - bl / 2)
-        self.cam = (left + bw + 3.0 + cam / 2, top - bl / 2)
+        self.row1_y = top - bl / 2
+        self.board = (left + bw / 2, self.row1_y)
+        self.cam = (left + bw + 3.0 + cam / 2, self.row1_y)
         self.batt = (0.0, top - bl - 2.0 - tl / 2)
+        self.switch_wall = self.inner_w / 2
+        self.switch = (self.switch_wall - SWITCH_DEPTH / 2, self.row1_y, BACK_SWITCH_CZ)
+        self.usb_z = BACK_FOAM + USB_CENTER
+        self.board_top_y = top - CLEARANCE  # the USB-C end of the board
 
     def body(self):
         plate = box(CALC_WIDTH, CALC_LENGTH, PLATE_THICKNESS, CALC_CORNER)
@@ -519,15 +535,43 @@ class BackPlate:
         pod = pillow(self.w, self.l, self.h, POD_RADIUS).translate((0, self.cy, 0))
         pocket = box(self.inner_w, self.inner_l, self.inner_h + 1, 1.0).translate((0, self.cy, -1))
         body = plate + pod - pocket
-        # Lens window with a recessed ring, over the camera.
-        body -= cylinder(CAM_LENS_WINDOW, -1, self.h + 1, *self.cam)
-        body -= cylinder(CAM_LENS_RING, self.h - 0.5, self.h + 1, *self.cam)
-        # USB-C opening toward the top edge, where the calculator's own port is.
+        ih = self.inner_h
+        cx, cy = self.cam
         bx, by = self.board
-        body -= cube(bx - USB_OPENING_WIDTH / 2, bx + USB_OPENING_WIDTH / 2, by, self.cy + self.l / 2 + 1,
-                     -1, min(W11_FLAT_HEIGHT, self.inner_h))
+        cam = CAMERA_SIZE + 2 * CLEARANCE
+        # Collar under the roof that the camera presses up into, so the lens sits in the window.
+        collar = box(cam + 1.6, cam + 1.6, CAM_COLLAR, 1.0) - box(cam, cam, CAM_COLLAR + 2, 0.5).translate((0, 0, -1))
+        body += collar.translate((cx, cy, ih - CAM_COLLAR))
+        # Lens window with a recessed ring, over the camera.
+        body -= cylinder(CAM_LENS_WINDOW, -1, self.h + 1, cx, cy)
+        body -= cylinder(CAM_LENS_RING, self.h - 0.5, self.h + 1, cx, cy)
+        # Short stubs beside the board's corners, hanging from the roof, so it can't
+        # slide sideways. The middle is left open for the camera ribbon.
+        bw, bl = W11_WIDTH + 2 * CLEARANCE, W11_LENGTH + 2 * CLEARANCE
+        x_r = bx + bw / 2
+        for y in (by - bl / 2 + 1.0, by + bl / 2 - 5.0):
+            body += cube(x_r, x_r + 1.2, y, y + 4.0, BACK_FOAM + 1.5, ih + 0.01)
+        # A divider stub between the board and the battery (gap left for the wires).
+        body += cube(bx - bw / 2, bx + bw / 2 - 6.0, by - bl / 2 - 1.6, by - bl / 2 - 0.4, BATTERY_THICKNESS + 0.6, ih + 0.01)
+        # USB-C opening in the top wall: a closed window the plug's overmold fits through.
+        z0, z1 = self.usb_z - PLUG_HEIGHT / 2 - 0.4, self.usb_z + PLUG_HEIGHT / 2 + 0.4
+        body -= cube(bx - USB_OPENING_WIDTH / 2, bx + USB_OPENING_WIDTH / 2, by, self.cy + self.l / 2 + 1, -1, z1)
         # Channel through the plate so the plug and cable run flat to the top edge.
         body -= cube(bx - USB_OPENING_WIDTH / 2, bx + USB_OPENING_WIDTH / 2, by, CALC_LENGTH / 2 + 1, -1, PLATE_THICKNESS + 1)
+        # Vents in the roof over the board, where the ESP32 warms up.
+        for i in range(4):
+            y = by - 6.0 + i * 4.0
+            body -= cube(bx - 5.0, bx + 5.0, y - 0.6, y + 0.6, ih - 1, self.h + 1)
+        # Power switch: lever slot through the right wall, two blocks that hold the body.
+        sx, sy, sz = self.switch
+        wx = self.switch_wall
+        slot_l = SWITCH_LEVER + SWITCH_TRAVEL + 0.8
+        slot_h = SWITCH_LEVER + 0.8
+        body -= cube(wx - 1, self.w / 2 + 1, sy - slot_l / 2, sy + slot_l / 2, sz - slot_h / 2, sz + slot_h / 2)
+        for d in (-1, 1):
+            y_in = sy + d * (SWITCH_LENGTH / 2 + 0.2)
+            body += cube(wx - SWITCH_DEPTH, wx + 0.01, min(y_in, y_in + d * 1.2), max(y_in, y_in + d * 1.2),
+                         sz - SWITCH_WIDTH / 2, ih + 0.01)
         return body
 
 
@@ -594,7 +638,7 @@ def parts():
         "camera_box/stacked_cover.stl": CAM_STACKED.cover(),
         "camera_box/side_base.stl": CAM_SIDE.base(),
         "camera_box/side_cover.stl": CAM_SIDE.cover(),
-        "back_plate/back_plate.stl": BACK.body().mirror((0, 0, 1)).translate((0, 0, BACK.h)),
+        "back_plate/back_plate.stl": BACK.body().translate((0, 0, GRIP_DEPTH)),  # calculator side down
     }
 
 

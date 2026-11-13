@@ -46,7 +46,7 @@ def mesh_xml(part):
     return f"    <mesh>\n     <vertices>\n{v}\n     </vertices>\n     <triangles>\n{t}\n     </triangles>\n    </mesh>", hi - lo
 
 
-def write_3mf(path, parts):
+def write_3mf(path, parts, center=PLATE_CENTER, title="TI-84 Claude mini box"):
     objects, items, sizes = [], [], []
     for i, (name, part) in enumerate(parts, start=1):
         xml, size = mesh_xml(part)
@@ -54,15 +54,15 @@ def write_3mf(path, parts):
         objects.append(f'  <object id="{i}" name="{name}" type="model">\n{xml}\n  </object>')
     # Lay the parts out left to right, centered on the plate.
     total = sum(s[0] for s in sizes) + GAP * (len(sizes) - 1)
-    x = PLATE_CENTER[0] - total / 2
+    x = center[0] - total / 2
     for i, size in enumerate(sizes, start=1):
         cx = x + size[0] / 2
-        items.append(f'  <item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {cx:.3f} {PLATE_CENTER[1]:.3f} 0"/>')
+        items.append(f'  <item objectid="{i}" transform="1 0 0 0 1 0 0 0 1 {cx:.3f} {center[1]:.3f} 0"/>')
         x += size[0] + GAP
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
              '<model unit="millimeter" xml:lang="en-US" '
              'xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n'
-             ' <metadata name="Title">TI-84 Claude mini box</metadata>\n'
+             f' <metadata name="Title">{title}</metadata>\n'
              ' <resources>\n' + "\n".join(objects) + '\n </resources>\n'
              ' <build>\n' + "\n".join(items) + '\n </build>\n</model>\n')
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
@@ -74,3 +74,11 @@ def write_3mf(path, parts):
 
 if __name__ == "__main__":
     write_3mf(HERE / "mini_box.3mf", [("mini_base", mc.mini_base()), ("mini_cover", mc.mini_cover())])
+    # The camera back plate is 89 x 193 mm: it needs a 256 mm bed (X1, P1, A1; not the A1 mini).
+    # Printed calculator side down, so the outside face comes out clean.
+    write_3mf(HERE / "camera_plate.3mf", [("camera_back_plate", mc.BACK.body().translate((0, 0, mc.GRIP_DEPTH)))],
+              center=(128.0, 128.0), title="TI-84 Claude camera back plate")
+    # A 30 mm slice of the plate with both edge grips: checks the fit on the calculator first.
+    strip = mc.BACK.body() ^ mc.cube(-60, 60, -15, 15, -10, 20)
+    write_3mf(HERE / "camera_plate_fit_test.3mf", [("camera_plate_fit_test", strip.translate((0, 0, mc.GRIP_DEPTH)))],
+              title="TI-84 Claude camera plate fit test")
