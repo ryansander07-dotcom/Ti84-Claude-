@@ -31,12 +31,20 @@ from claude_client import Claude, ClaudeError
 # Longest question line the bridge will accept from the calculator.
 MAX_QUESTION = 500
 
+# Messages only the dongle can answer (camera and Wi-Fi setup).
+DONGLE_ONLY = {"VIEW", "SNAP", "PHOTO", "SCAN"}
+
 
 def handle_line(line: str, claude: Claude, width: int = SCREEN_WIDTH) -> list[str]:
     """Answer one protocol message from the calculator with reply lines."""
     line = line.strip()
     if line == "PING":
         return ["PONG"]
+    if line == "STATUS":
+        return [f"S:{text}" for text in to_screen_lines(
+            f"Connected to the bridge on your computer. Model: {claude.model}", width)] + ["END"]
+    if line in DONGLE_ONLY or line.startswith(("PHOTO:", "WIFI:")):
+        return ["E:Only the dongle can do", "E:that. The bridge has no", "E:camera or Wi-Fi setup.", "END"]
     if not line.startswith("Q:"):
         return ["E:Unknown message.", "END"]
     question = line[2:].strip()[:MAX_QUESTION]

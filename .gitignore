@@ -16,4 +16,4 @@ calculator/obj/
 .DS_Store
 
 # Dongle API key and Wi-Fi
-esp32/secrets.h
+esp32/**/secrets.h

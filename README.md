@@ -25,13 +25,13 @@ you only ever plug it into the calculator. Everything is done from the calculato
 - **Status**: shows whether the dongle is connected to Wi-Fi and to Claude.
 
 One-time setup: put your API key (and, optionally, your home Wi-Fi) in
-`esp32/secrets.h`, then flash the dongle from your computer over USB-C. `secrets.h` is in
-`.gitignore`, so it never gets committed.
+`esp32/ti84_dongle/secrets.h`, then flash the dongle from your computer over USB-C (see
+"Set up the dongle" below). `secrets.h` is in `.gitignore`, so it never gets committed.
 
 **Hardware**
 
-- An ESP32-S3 camera board with native USB and PSRAM: the Seeed XIAO ESP32S3 Sense
-  (best documented) or the Meshnology W11 ESP32-S3 with OV3660.
+- A Seeed XIAO ESP32S3 Sense (ESP32-S3 with camera and 8 MB PSRAM). The firmware's
+  camera pins are set for this board.
 - A USB OTG cable, mini-USB (male) to USB-C (male). It must be OTG so the calculator
   acts as the USB host and powers the dongle.
 - Optional: a small 3.7 V LiPo (400-500 mAh) on the board's battery pads, if the
@@ -42,9 +42,9 @@ One-time setup: put your API key (and, optionally, your home Wi-Fi) in
 | Folder | What it is | Status |
 |---|---|---|
 | `bridge/` | Python program that stands in for the dongle on your computer, for testing | Ready to test |
-| `calculator/` | C program for the calculator (CE C toolchain, needs arTIfiCE on OS 5.8.2) | Not started |
-| `esp32/` | Dongle firmware for the ESP32-S3 camera board | Not started |
-| `tests/` | Tests for the bridge | 18 passing |
+| `calculator/` | `CLAUDE` program for the calculator (CE C toolchain) | Written, not yet compiled or run |
+| `esp32/ti84_dongle/` | Dongle firmware for the XIAO ESP32S3 Sense (Arduino) | Written, not yet compiled or run |
+| `tests/` | Bridge tests, plus a check that the dongle's C++ text cleanup matches the Python one | |
 
 ## Step 1: test your API key with the bridge
 
@@ -77,14 +77,70 @@ same width as the calculator screen. To test a photo of a math problem:
 Add `--fast` to use Claude Haiku 5.5, which is quicker and cheaper but less reliable on
 hard problems. The default is Claude Opus 5.5.
 
-## Step 2: test the calculator program with the bridge
+## Step 2: put the program on the calculator
 
-Before the dongle is ready, the calculator program can be tested against your computer:
+Your OS 5.8.2 blocks C programs by default, so this needs the arTIfiCE jailbreak (works
+up to OS 5.8.4; don't update the OS).
+
+1. Install the [CE C toolchain](https://ce-programming.github.io/toolchain/), then build:
+
+   ```bash
+   cd calculator
+   make
+   ```
+
+   This makes `calculator/bin/CLAUDE.8xp`.
+2. With TI Connect CE, send `CLAUDE.8xp` and the toolchain's `clibs.8xg` (the CE C
+   libraries: graphx, usbdrvce, srldrvce) to the calculator.
+3. Run arTIfiCE, then start `CLAUDE` from it (or from the Cesium shell it can install).
+
+You can try the calculator program before the dongle is built: plug the calculator into
+your computer with a normal USB cable, start `CLAUDE`, and run the bridge:
 
 ```bash
 python bridge.py --serial /dev/cu.usbmodem1101   # Mac (run ls /dev/cu.* to find it)
 python bridge.py --serial COM3                   # Windows (check Device Manager)
 ```
+
+Asking questions and Status work with the bridge. Photo and Wi-Fi need the dongle.
+
+## Step 3: set up the dongle
+
+1. Install the [Arduino IDE](https://www.arduino.cc/en/software) (or `arduino-cli`),
+   add the "esp32 by Espressif Systems" boards (version 3.x), and install the
+   **ArduinoJson** library (version 7).
+2. Copy `esp32/ti84_dongle/secrets.example.h` to `secrets.h` in the same folder. Paste
+   your API key in. Your home Wi-Fi is optional; you can add networks from the
+   calculator later.
+3. Open `esp32/ti84_dongle/ti84_dongle.ino` and pick these settings in the Tools menu:
+
+   | Setting | Value |
+   |---|---|
+   | Board | XIAO_ESP32S3 |
+   | USB Mode | USB-OTG (TinyUSB) |
+   | USB CDC On Boot | Disabled |
+   | PSRAM | OPI PSRAM |
+   | Partition Scheme | Huge APP |
+
+4. Plug the dongle into your computer and click Upload. If the upload can't find the
+   board, hold the tiny **B** (boot) button while plugging it in, then upload again.
+
+After that, unplug it from the computer and plug it into the calculator with the OTG
+cable. Start `CLAUDE`, open **Wi-Fi** to join a network, and you're set. The dongle
+remembers up to 5 networks and joins the strongest one in range.
+
+**Using it from the calculator**
+
+- Typing: **[alpha]** switches between numbers/math, lowercase and uppercase. Letters are
+  where the calculator prints them in green (A is [math], B is [apps], and so on), [0] is a
+  space. **[2nd]** gives extra symbols: sqrt( on [x²], pi on [^], < on [math], > on
+  [apps]. **[del]** deletes, **[clear]** clears the line or goes back.
+- Photo: the screen shows what the camera sees. Press **[enter]** to take the picture,
+  then **[enter]** again to have Claude solve it, or **[y=]** to add a note first
+  ("just part b"). **[clear]** retakes.
+- Answers scroll with the arrow keys. **[clear]** goes back.
+- If the preview is upside down or mirrored, set `CAMERA_VFLIP` or `CAMERA_HMIRROR` in
+  `esp32/ti84_dongle/config.h` and upload again.
 
 ## Protocol
 
@@ -96,7 +152,8 @@ message per line ending in `\n`, except preview frames, which carry raw pixel by
 | calculator to dongle | `PING` | Check the dongle is there |
 | calculator to dongle | `Q:<question>` | Ask a question |
 | calculator to dongle | `VIEW` | Send one camera preview frame |
-| calculator to dongle | `PHOTO` | Take a full picture and send it to Claude |
+| calculator to dongle | `SNAP` | Take a full-size picture and keep it |
+| calculator to dongle | `PHOTO` | Send the kept picture to Claude (takes one first if there isn't one) |
 | calculator to dongle | `PHOTO:<note>` | Same, with a note such as "just part b" |
 | calculator to dongle | `SCAN` | List nearby Wi-Fi networks |
 | calculator to dongle | `WIFI:<name>\t<password>` | Join a network and remember it |
@@ -105,13 +162,13 @@ message per line ending in `\n`, except preview frames, which carry raw pixel by
 | dongle to calculator | `A:<line>` | One screen line of an answer (26 characters max) |
 | dongle to calculator | `E:<message>` | An error to show on screen |
 | dongle to calculator | `N:<network>` | One network from `SCAN` |
-| dongle to calculator | `S:<line>` | One status line from `STATUS` or `WIFI` |
-| dongle to calculator | `F:<width>,<height>,<bytes>` | A preview frame; exactly `<bytes>` bytes of 8-bit grayscale pixels follow |
+| dongle to calculator | `S:<line>` | One status line from `STATUS`, `SNAP` or `WIFI` |
+| dongle to calculator | `F:<width>,<height>,<bytes>` | A preview frame; exactly `<bytes>` bytes of 8-bit grayscale pixels follow, then `END` |
 | dongle to calculator | `END` | The reply is complete |
 
-`PHOTO` replies may take 10-30 seconds while Claude reads the picture. The bridge
-answers `VIEW`, `PHOTO`, `SCAN` and `WIFI` with an error, since your computer has no
-camera hooked up to the calculator.
+`PHOTO` replies may take 10-60 seconds while Claude reads the picture. The bridge
+answers `VIEW`, `SNAP`, `PHOTO`, `SCAN` and `WIFI` with an error, since your computer
+has no camera hooked up to the calculator.
 
 ## Running the tests
 
@@ -121,3 +178,4 @@ python -m pytest
 ```
 
 The tests use a fake Claude client, so they don't need an API key or cost anything.
+The text-cleanup comparison also needs a C++ compiler (it skips itself without one).

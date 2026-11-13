@@ -81,6 +81,22 @@ def test_empty_question_and_unknown_message():
     assert handle_line("HELLO\n", FakeClaude()) == ["E:Unknown message.", "END"]
 
 
+def test_status_reports_the_bridge():
+    claude = FakeClaude()
+    claude.model = "claude-opus-5-5"
+    reply = handle_line("STATUS\n", claude)
+    assert reply[-1] == "END"
+    assert all(r.startswith("S:") and len(r) - 2 <= SCREEN_WIDTH for r in reply[:-1])
+    assert "claude-opus-5-5" in "".join(r[2:] for r in reply[:-1])
+
+
+def test_dongle_only_messages_get_an_error():
+    for msg in ["VIEW", "SNAP", "PHOTO", "PHOTO:part b", "SCAN", "WIFI:home\tsecret"]:
+        reply = handle_line(msg + "\n", FakeClaude())
+        assert reply[0].startswith("E:") and reply[-1] == "END", msg
+        assert all(len(r) - 2 <= SCREEN_WIDTH for r in reply[:-1])
+
+
 def test_errors_are_wrapped_for_the_screen():
     reply = handle_line("Q:hi", FakeClaude(error="API key not accepted. Check the .env file."))
     assert reply[-1] == "END"
