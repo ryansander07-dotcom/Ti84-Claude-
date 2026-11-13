@@ -341,6 +341,97 @@ def mini_cover():
     return print_top_down(c, MINI_INNER_H + COVER_TOP)
 
 
+# ---- camera box: Meshnology W11 with its camera board snapped on ---------------------
+# A standalone box on the end of the USB cable, lens looking out of the top like a
+# phone camera. Two layouts: "stacked" (battery under the board: small footprint,
+# taller) and "side" (battery beside the board: flatter, wider).
+# W11 main board from Meshnology's drawing: 18.00 x 23.50 mm, USB-C overhangs to
+# 24.54 mm. The stack height with the camera board and lens is an ESTIMATE.
+W11_WIDTH = 18.0
+W11_LENGTH = 24.54        # including the USB-C overhang; USB-C faces +Y
+W11_STACK_HEIGHT = 13.0   # main board + camera board + lens (estimate; measure it)
+W11_USB_HEIGHT = 1.6      # USB-C center above the bottom of the main board (estimate)
+CAM_LENS_FROM_CENTER = 0.0  # lens position along Y from the board's center (estimate)
+CAM_LENS_WINDOW = 9.0
+CAM_LENS_RING = 13.0
+CAM_RADIUS = 4.0
+CAM_STANDOFF = 2.2        # side layout: board height above the floor, on two ledges
+
+
+class CameraBox:
+    def __init__(self, layout):
+        self.layout = layout
+        bw, bl = W11_WIDTH + 2 * CLEARANCE, W11_LENGTH + 2 * CLEARANCE
+        tw, tl = BATTERY_WIDTH + 2 * CLEARANCE, BATTERY_LENGTH + 2 * CLEARANCE
+        if layout == "stacked":
+            self.cavity_w, self.cavity_l = max(bw, tw), max(bl, tl)
+            self.board_z = BATTERY_THICKNESS + MINI_TAPE
+            self.board_cx = 0.0
+            self.batt_cx, self.batt_cy = 0.0, 0.0
+            self.inner_h = self.board_z + W11_STACK_HEIGHT + CLEARANCE
+        else:
+            self.cavity_w, self.cavity_l = bw + 2.0 + tw, max(bl, tl)
+            self.board_z = CAM_STANDOFF  # on ledges, so a USB plug's body clears the floor
+            self.board_cx = -self.cavity_w / 2 + bw / 2
+            self.batt_cx, self.batt_cy = self.cavity_w / 2 - tw / 2, 0.0
+            self.inner_h = max(CAM_STANDOFF + W11_STACK_HEIGHT, BATTERY_THICKNESS) + CLEARANCE
+        self.board_cy = self.cavity_l / 2 - bl / 2  # USB-C end against the +Y wall
+        self.inner_w = self.cavity_w + 2 * LIP_WALL + 2 * LIP_FIT
+        self.inner_l = self.cavity_l + 2 * LIP_WALL + 2 * LIP_FIT
+        self.w = self.inner_w + 2 * COVER_WALL
+        self.l = self.inner_l + 2 * COVER_WALL
+        self.h = MINI_FLOOR + self.inner_h + COVER_TOP
+
+    def base(self):
+        base = box(self.w, self.l, MINI_FLOOR, CAM_RADIUS)
+        inside = rim(self.inner_w, self.inner_l, CAM_RADIUS)
+        if self.layout == "side":
+            # Low ribs keep the board and the battery in their own spots.
+            bw, bl = W11_WIDTH + 2 * CLEARANCE, W11_LENGTH + 2 * CLEARANCE
+            ribs = corner_ribs(self.board_cx, self.board_cy, bw, bl)
+            ribs += corner_ribs(self.batt_cx, self.batt_cy, BATTERY_WIDTH + 2 * CLEARANCE,
+                                BATTERY_LENGTH + 2 * CLEARANCE)
+            # Keep the ribs inside the rim, clear of the cover's rounded corners.
+            inside += ribs ^ box(self.cavity_w - 0.05, self.cavity_l - 0.05, 10, max(CAM_RADIUS - COVER_WALL - LIP_WALL, 0.5))
+            inside -= cube(-self.cavity_w / 2 + bw - 1, -self.cavity_w / 2 + bw + 3, -100, 100, -1, 10)  # wire gap
+            for sx in (-1, 1):  # ledges under the board's long edges
+                x = self.board_cx + sx * (W11_WIDTH / 2 - 1.0)
+                inside += cube(x - 1.0, x + 1.0, self.board_cy - W11_LENGTH / 2 + 2, self.board_cy + W11_LENGTH / 2 - 3,
+                               0, CAM_STANDOFF)
+        # Gap in the rim where the USB plug's body goes.
+        inside -= cube(self.board_cx - USB_OPENING_WIDTH / 2, self.board_cx + USB_OPENING_WIDTH / 2,
+                       self.cavity_l / 2 - 1, self.l, -1, 10)
+        return base + inside.translate((0, 0, MINI_FLOOR - 0.01))  # sunk into the floor so it's one piece
+
+    def cover(self):
+        c = shell(self.w, self.l, self.inner_h, CAM_RADIUS)
+        lens_y = self.board_cy + CAM_LENS_FROM_CENTER
+        c -= cylinder(CAM_LENS_WINDOW, -1, self.inner_h + COVER_TOP + 1, self.board_cx, lens_y)
+        c -= cylinder(CAM_LENS_RING, self.inner_h + COVER_TOP - 0.6, self.inner_h + COVER_TOP + 1, self.board_cx, lens_y)
+        # USB-C notch at the board's end, open at the top so a plug's overmold clears it.
+        usb_z = self.board_z + W11_USB_HEIGHT
+        c -= cube(self.board_cx - USB_OPENING_WIDTH / 2, self.board_cx + USB_OPENING_WIDTH / 2,
+                  self.board_cy + W11_LENGTH / 2 - 0.5, self.l / 2 + 1, usb_z - 3.5, usb_z + 4.0)
+        # Rails down the board's long sides and a stop at its far end, hanging from
+        # the top so the board can't shift (they end above the battery).
+        rail_z0 = self.board_z + 2.0
+        y0, y1 = self.board_cy - W11_LENGTH / 2, self.board_cy + W11_LENGTH / 2
+        for sx in (-1, 1):
+            x = self.board_cx + sx * (W11_WIDTH / 2 + CLEARANCE + 0.6)
+            c += cube(x - 0.6, x + 0.6, y0 + 3, y1 - 3, rail_z0, self.inner_h + 0.01)
+        c += cube(self.board_cx - 4, self.board_cx + 4, y0 - CLEARANCE - 1.2, y0 - CLEARANCE, rail_z0, self.inner_h + 0.01)
+        # Vents beside the lens over the board.
+        for i in range(3):
+            x = self.board_cx + (-1 if self.layout == "side" else 1) * 0 + (i - 1) * 3.0
+            y = self.board_cy - W11_LENGTH / 2 + 3.0
+            c -= cube(x - 0.6, x + 0.6, y - 2.5, y + 2.5, self.inner_h - 1, self.inner_h + COVER_TOP + 1)
+        return print_top_down(c.translate((0, 0, 0)), self.inner_h + COVER_TOP)
+
+
+CAM_STACKED = CameraBox("stacked")
+CAM_SIDE = CameraBox("side")
+
+
 # ---- checks ---------------------------------------------------------------------
 
 def check_fit():
@@ -397,6 +488,10 @@ def parts():
         "clip_on/cover.stl": cover(),
         "mini/mini_base.stl": mini_base(),
         "mini/mini_cover.stl": mini_cover(),
+        "camera_box/stacked_base.stl": CAM_STACKED.base(),
+        "camera_box/stacked_cover.stl": CAM_STACKED.cover(),
+        "camera_box/side_base.stl": CAM_SIDE.base(),
+        "camera_box/side_cover.stl": CAM_SIDE.cover(),
     }
 
 
