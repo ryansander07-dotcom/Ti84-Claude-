@@ -70,9 +70,9 @@ static void fill(void) {
     if (n > 0) rx_len += (size_t)n;
 }
 
-static bool write_all(const void *data, size_t len) {
+static bool write_all(const void *data, size_t len, clock_t timeout) {
     const uint8_t *p = data;
-    clock_t deadline = clock() + 5 * CLOCKS_PER_SEC;
+    clock_t deadline = clock() + timeout;
     while (len > 0) {
         if (!has_srl) return false;
         int n = srl_Write(&srl, p, len);
@@ -89,7 +89,13 @@ static bool write_all(const void *data, size_t len) {
 
 bool link_send(const char *line) {
     link_poll();
-    return write_all(line, strlen(line)) && write_all("\n", 1);
+    return write_all(line, strlen(line), 5 * CLOCKS_PER_SEC) && write_all("\n", 1, 5 * CLOCKS_PER_SEC);
+}
+
+void link_cancel(void) {
+    /* Never wait more than a moment: the user wants out now. */
+    link_poll();
+    write_all("\x18\n", 2, CLOCKS_PER_SEC / 4);
 }
 
 int link_read_line(char *buf, size_t size, uint32_t timeout_s, bool allow_cancel) {

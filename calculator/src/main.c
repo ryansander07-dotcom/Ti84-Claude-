@@ -202,10 +202,13 @@ static bool get_text(const char *prompt, enum mode mode, size_t max_len) {
 
 /* Check something is answering on USB: send PING and wait briefly for PONG.
    Anything else that arrives first (the end of a cancelled answer) is thrown away. */
+static bool ping_cancelled;
 static bool ping(void) {
+    ping_cancelled = false;
     if (!link_send("PING")) return false;
     for (;;) {
         int n = link_read_line(reply, sizeof reply, PING_TIMEOUT, true);
+        if (n == LINK_CANCELLED) ping_cancelled = true;
         if (n < 0) return false;
         if (strcmp(reply, "PONG") == 0) return true;
     }
@@ -227,6 +230,7 @@ static bool require_link(void) {
     }
     show_message("Checking the dongle...", "clear: cancel");
     if (ping()) return true;
+    if (ping_cancelled) return false; /* [clear]: just go back */
     show_message("Nothing answered on USB.", "enter: back");
     put_row(2, "Plugged into a computer?");
     put_row(3, "Start bridge.py there.");
@@ -279,7 +283,7 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
         if (n == LINK_CANCELLED) {
             /* Tell the dongle to drop it and leave right away. Whatever it still
                sends is thrown away by the PING before the next request. */
-            link_send("\x18");
+            link_cancel();
             line_count = 0;
             return false;
         }
@@ -397,9 +401,11 @@ static void bar(const char *text) {
 
 /* Ask for one preview frame and draw it at 2x, row by row, straight into the
    draw buffer: no frame copy is kept in the calculator's RAM. */
+static uint8_t pending_key; /* a key pressed while a frame was coming in */
 static bool draw_preview(void) {
     if (!link_send("VIEW")) return false;
-    int n = link_read_line(reply, sizeof reply, QUICK_TIMEOUT, false);
+    int n = link_read_line(reply, sizeof reply, QUICK_TIMEOUT, true);
+    if (n == LINK_CANCELLED) pending_key = sk_Clear;
     if (n < 0) return false;
     unsigned w, h, size;
     if (sscanf(reply, "F:%u,%u,%u", &w, &h, &size) != 3 || w != PREVIEW_W || h != PREVIEW_H ||
@@ -410,6 +416,9 @@ static bool draw_preview(void) {
     static uint8_t row[PREVIEW_W];
     uint8_t *screen = (uint8_t *)gfx_vbuffer;
     for (int y = 0; y < PREVIEW_H; y++) {
+        uint8_t k = os_GetCSC();
+        if (k) pending_key = k;
+        if (pending_key == sk_Clear) return false; /* leave now; the PING before the next request drops the rest */
         if (!link_read_bytes(row, PREVIEW_W, QUICK_TIMEOUT)) return false;
         uint8_t *out = screen + (2 * y) * GFX_LCD_WIDTH;
         for (int x = 0; x < PREVIEW_W; x++) out[2 * x] = out[2 * x + 1] = row[x];
@@ -427,7 +436,8 @@ static enum photo_choice aim_and_snap(void) {
         bool snapped = false;
         while (!snapped) {
             link_poll();
-            uint8_t k = os_GetCSC();
+            uint8_t k = pending_key ? pending_key : os_GetCSC();
+            pending_key = 0;
             if (k == sk_Clear) return PHOTO_CANCEL;
             if (k == sk_Enter) {
                 bar("Taking the picture...");
@@ -438,6 +448,8 @@ static enum photo_choice aim_and_snap(void) {
             }
             if (draw_preview()) {
                 bar("ENTER: take picture   CLEAR: back");
+            } else if (pending_key == sk_Clear) {
+                return PHOTO_CANCEL;
             } else {
                 gfx_FillScreen(0);
                 bar("No camera picture. CLEAR: back");
@@ -448,7 +460,8 @@ static enum photo_choice aim_and_snap(void) {
 
         bool ok = false;
         for (;;) {
-            int n = link_read_line(reply, sizeof reply, 20, false);
+            int n = link_read_line(reply, sizeof reply, 20, true);
+            if (n == LINK_CANCELLED) return PHOTO_CANCEL;
             if (n < 0) break;
             if (strcmp(reply, "END") == 0) break;
             if (reply[0] == 'S') ok = true;

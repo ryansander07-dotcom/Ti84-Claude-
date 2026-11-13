@@ -18,6 +18,9 @@ bool link_ready(void);
 /* Send one protocol line; the newline is added here. */
 bool link_send(const char *line);
 
+/* Tell the dongle to drop what it's doing ([clear] was pressed). Returns at once. */
+void link_cancel(void);
+
 /* Read one line (without its newline) into buf. Returns its length, or one of
    the LINK_ codes. Pressing [clear] cancels when allow_cancel is true. */
 int link_read_line(char *buf, size_t size, uint32_t timeout_s, bool allow_cancel);
