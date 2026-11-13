@@ -483,7 +483,9 @@ BACK_FOAM = 1.0           # foam pad under the board; lifts the USB-C so the plu
 USB_CENTER = 2.6          # USB-C center above the bottom of the W11 board
 PLUG_HEIGHT = 6.5         # a USB-C plug's plastic overmold, top to bottom
 CAM_COLLAR = 3.0          # square collar under the roof that holds the camera up at the window
-POD_TOP = 1.0             # roof thickness of the raised area
+POD_TOP = 0.8             # roof thickness of the raised area (4 layers at 0.2 mm)
+BACK_HEADROOM = 0.2       # space between the tallest part and the roof
+BACK_LOW_EXTRA = 0.6      # over the battery: room for the antenna sticker and tape
 POD_FROM_TOP = 6.0        # gap between the calculator's top edge and the raised area
 POD_RADIUS = 3.0
 POD_EDGE = 2.0            # wall around the parts
@@ -494,14 +496,18 @@ class BackPlate:
     """Raised area layout, looking at the back with the calculator's top edge up:
     top row: W11 board (USB-C pointing at the top edge), camera beside it, power
     switch against the right wall; bottom row: the battery, lying across, with the
-    Wi-Fi antenna stuck under the roof above it."""
+    Wi-Fi antenna stuck under the roof above it. The raised area steps down over the
+    battery, which is much thinner than the board stack."""
 
     def __init__(self):
         bw, bl = W11_WIDTH + 2 * CLEARANCE, W11_LENGTH + 2 * CLEARANCE
         cam = CAMERA_SIZE + 2 * CLEARANCE
         tw, tl = BATTERY_LENGTH + 2 * CLEARANCE, BATTERY_WIDTH + 2 * CLEARANCE  # battery lies across
-        self.inner_h = max(BACK_FOAM + W11_FLAT_HEIGHT, CAMERA_HEIGHT, BATTERY_THICKNESS) + CLEARANCE
+        self.inner_h = max(BACK_FOAM + W11_FLAT_HEIGHT, CAMERA_HEIGHT) + BACK_HEADROOM
         self.h = self.inner_h + POD_TOP
+        self.low_inner = BATTERY_THICKNESS + BACK_LOW_EXTRA
+        self.low_h = self.low_inner + POD_TOP
+        self.tall_inner_l = bl + 1.0  # the board row
         sw_room = 1.0 + SWITCH_DEPTH + SWITCH_PINS
         row1_w = bw + 3.0 + cam + sw_room
         self.inner_w = max(row1_w, tw)
@@ -519,6 +525,7 @@ class BackPlate:
         self.switch = (self.switch_wall - SWITCH_DEPTH / 2, self.row1_y, BACK_SWITCH_CZ)
         self.usb_z = BACK_FOAM + USB_CENTER
         self.board_top_y = top - CLEARANCE  # the USB-C end of the board
+        self.tall_cy = top - self.tall_inner_l / 2
 
     def body(self):
         plate = box(CALC_WIDTH, CALC_LENGTH, PLATE_THICKNESS, CALC_CORNER)
@@ -532,8 +539,11 @@ class BackPlate:
                        -CALC_LENGTH / 2 + CALC_CORNER, CALC_LENGTH / 2 - CALC_CORNER, -GRIP_DEPTH, -GRIP_DEPTH + 0.8)
             plate += wall + lip
         # The raised area: a smooth low hump, hollow and open toward the calculator.
-        pod = pillow(self.w, self.l, self.h, POD_RADIUS).translate((0, self.cy, 0))
-        pocket = box(self.inner_w, self.inner_l, self.inner_h + 1, 1.0).translate((0, self.cy, -1))
+        # Low over the battery, full height only over the board row.
+        pod = pillow(self.w, self.l, self.low_h, POD_RADIUS).translate((0, self.cy, 0))
+        pod += pillow(self.w, self.tall_inner_l + 2 * POD_EDGE, self.h, POD_RADIUS).translate((0, self.tall_cy, 0))
+        pocket = box(self.inner_w, self.inner_l, self.low_inner + 1, 1.0).translate((0, self.cy, -1))
+        pocket += box(self.inner_w, self.tall_inner_l, self.inner_h + 1, 1.0).translate((0, self.tall_cy, -1))
         body = plate + pod - pocket
         ih = self.inner_h
         cx, cy = self.cam
@@ -544,15 +554,13 @@ class BackPlate:
         body += collar.translate((cx, cy, ih - CAM_COLLAR))
         # Lens window with a recessed ring, over the camera.
         body -= cylinder(CAM_LENS_WINDOW, -1, self.h + 1, cx, cy)
-        body -= cylinder(CAM_LENS_RING, self.h - 0.5, self.h + 1, cx, cy)
+        body -= cylinder(CAM_LENS_RING, self.h - 0.3, self.h + 1, cx, cy)
         # Short stubs beside the board's corners, hanging from the roof, so it can't
         # slide sideways. The middle is left open for the camera ribbon.
         bw, bl = W11_WIDTH + 2 * CLEARANCE, W11_LENGTH + 2 * CLEARANCE
         x_r = bx + bw / 2
         for y in (by - bl / 2 + 1.0, by + bl / 2 - 5.0):
             body += cube(x_r, x_r + 1.2, y, y + 4.0, BACK_FOAM + 1.5, ih + 0.01)
-        # A divider stub between the board and the battery (gap left for the wires).
-        body += cube(bx - bw / 2, bx + bw / 2 - 6.0, by - bl / 2 - 1.6, by - bl / 2 - 0.4, BATTERY_THICKNESS + 0.6, ih + 0.01)
         # USB-C opening in the top wall: a closed window the plug's overmold fits through.
         z0, z1 = self.usb_z - PLUG_HEIGHT / 2 - 0.4, self.usb_z + PLUG_HEIGHT / 2 + 0.4
         body -= cube(bx - USB_OPENING_WIDTH / 2, bx + USB_OPENING_WIDTH / 2, by, self.cy + self.l / 2 + 1, -1, z1)
