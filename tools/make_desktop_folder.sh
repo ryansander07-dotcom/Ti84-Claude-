@@ -95,7 +95,7 @@ P="$OUT/4 - 3D print files"
 mkdir -p "$P/No-camera box" "$P/Camera back plate" "$P/Pictures"
 cp "$REPO/case/mini_box.3mf" "$REPO/case/mini_box_print_notes.txt" "$P/No-camera box/"
 cp "$REPO/case/camera_plate_fit_test.3mf" "$REPO/case/camera_plate.3mf" "$REPO/case/camera_plate_print_notes.txt" "$P/Camera back plate/"
-cp "$REPO"/case/renders/camera_plate-*.png "$P/Pictures/"
+cp "$REPO"/case/renders/camera_plate-*.png "$REPO"/case/renders/nocam_inside-*.png "$P/Pictures/"
 
 # 5: wiring and parts
 W="$OUT/5 - Wiring and parts"
