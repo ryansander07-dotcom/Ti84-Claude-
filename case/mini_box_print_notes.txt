@@ -12,8 +12,8 @@ Mini box: how to print (mini_box.3mf)
 5. Slice and print. About 30-40 minutes and roughly 7 g of filament.
 
 The two parts:
-  mini_base   (31.8 x 53.8 x 3.7 mm)   flat side down
-  mini_cover  (31.8 x 53.8 x 11.1 mm)  printed upside down, top face on the plate;
+  mini_base   (31.2 x 54.0 x 3.7 mm)   flat side down
+  mini_cover  (31.2 x 54.0 x 10.8 mm)  printed upside down, top face on the plate;
               the open side faces up. That's on purpose.
 
 The cover should press onto the base snugly. If it's too tight, sand the outside of

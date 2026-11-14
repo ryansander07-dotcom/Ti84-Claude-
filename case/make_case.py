@@ -73,9 +73,9 @@ CAMERA_HEIGHT = 5.5       # module plus lens barrel
 CAMERA_GAP = 3.0          # room for the folded ribbon between board and camera
 
 # ---- the battery: EEMB 402535, 3.7 V 320 mAh ----------------------------------
-BATTERY_WIDTH = 25.5      # X
-BATTERY_LENGTH = 36.0     # Y, including the protection circuit at the wire end
-BATTERY_THICKNESS = 4.3
+BATTERY_WIDTH = 24.94     # X (measured)
+BATTERY_LENGTH = 36.2     # Y, including the protection circuit at the wire end (measured)
+BATTERY_THICKNESS = 3.97  # measured
 
 # ---- cover ----------------------------------------------------------------------
 CLEARANCE = 0.4           # around each part inside
