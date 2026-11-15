@@ -5,6 +5,7 @@ dongle into this computer (not through the relay) and run:
     .venv/bin/python esp32/tools/e2e_test.py
 
 It asks Claude two short questions and sends one photo (about 2 cents in all).
+On a board with no camera (ESP32-C3) it checks that camera requests are refused instead.
 It doesn't change your saved Wi-Fi networks or your credit balance.
 """
 
@@ -140,7 +141,9 @@ def main():
     wifi = next((l for l in (lines or []) if l.startswith("S:Wi-Fi:")), "")
     check("STATUS replies", bool(lines), f"{info.get('seconds', 0):.2f} s")
     check("Wi-Fi connected", "not connected" not in wifi and bool(wifi), wifi[2:])
-    check("Camera ready", any(l == "S:Camera: ready" for l in lines or []))
+    has_camera = not any(l == "S:Camera: none on this board" for l in lines or [])
+    if has_camera:
+        check("Camera ready", any(l == "S:Camera: ready" for l in lines or []))
     lines, info = c.request("CREDIT")
     check("CREDIT sends a K: code", info.get("credit") is not None, info.get("credit"))
 
@@ -168,6 +171,17 @@ def main():
         check(f"Ready again after cancel at {delay} s", ok and time.time() - t < PING_TIMEOUT,
               f"PONG after {time.time() - t:.2f} s")
 
+    if has_camera:
+        camera_checks(c)
+    else:
+        lines, _ = c.request("VIEW")
+        check("No camera: VIEW is refused", any(l.startswith("E:") for l in lines or []), str(lines))
+        lines, _ = c.request("PHOTO:what is this?")
+        check("No camera: PHOTO is refused", any(l.startswith("E:") for l in lines or []), str(lines))
+    wifi_and_mistakes(c)
+
+
+def camera_checks(c):
     # 5. Camera preview, as the photo screen asks for it
     times = []
     for _ in range(5):
@@ -204,6 +218,9 @@ def main():
           f"{info.get('seconds', 0):.1f} s, longest silence {info.get('max_gap', 0):.1f} s: "
           + " ".join(l[2:] for l in (lines or [])[:3]))
 
+
+
+def wifi_and_mistakes(c):
     # 7. Wi-Fi menu
     lines, info = c.request("SAVED")
     saved = [l[2:] for l in lines or [] if l.startswith("W:")]
@@ -229,6 +246,9 @@ def main():
     lines, _ = c.request("NONSENSE")
     check("Unknown message is refused", any(l.startswith("E:") for l in lines or []))
 
+
+
+def report():
     failed = [r for r in results if not r[1]]
     print(f"\n{len(results) - len(failed)} of {len(results)} passed")
     sys.exit(1 if failed else 0)
@@ -236,3 +256,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    report()

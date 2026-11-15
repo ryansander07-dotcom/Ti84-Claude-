@@ -2,6 +2,17 @@
 // password go in secrets.h instead (copy secrets.example.h).
 #pragma once
 
+// Which board this is built for. The Meshnology W11 / XIAO (ESP32-S3) has the
+// camera and a USB port the firmware drives itself. An ESP32-C3 board has no
+// camera; its built-in USB serial port is the calculator link.
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define HAS_CAMERA 1
+#define BOARD_NAME "ESP32-S3"
+#else
+#define HAS_CAMERA 0
+#define BOARD_NAME "ESP32-C3"
+#endif
+
 // Claude Opus 5.5 is the most accurate. "claude-haiku-5-5" is faster and
 // much cheaper but makes more mistakes on hard problems.
 #define CLAUDE_MODEL "claude-opus-5-5"

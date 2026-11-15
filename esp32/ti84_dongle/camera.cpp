@@ -1,6 +1,11 @@
 #include "camera.h"
 
 #include <Arduino.h>
+
+#include "config.h"
+
+#if HAS_CAMERA
+
 #include <esp_camera.h>
 #include <img_converters.h>
 
@@ -135,3 +140,17 @@ const uint8_t *camera_photo(size_t *len) {
     *len = photo_len;
     return photo;
 }
+
+#else  // a board with no camera (ESP32-C3): every camera request says so
+
+bool camera_begin() { return false; }
+bool camera_ok() { return false; }
+bool camera_preview(uint8_t *) { return false; }
+bool camera_snap() { return false; }
+bool camera_has_photo() { return false; }
+const uint8_t *camera_photo(size_t *len) {
+    *len = 0;
+    return nullptr;
+}
+
+#endif

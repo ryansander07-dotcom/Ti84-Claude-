@@ -9,8 +9,6 @@
 //   PSRAM: OPI PSRAM      Partition Scheme: Huge APP
 
 #include <Arduino.h>
-#include <USB.h>
-#include <USBCDC.h>
 #include <WiFi.h>
 
 #include <string>
@@ -23,7 +21,20 @@
 #include "credit.h"
 #include "wifi_store.h"
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+// S3: the firmware runs the USB port itself (TinyUSB). Debug log goes to the UART pins.
+#include <USB.h>
+#include <USBCDC.h>
 USBCDC Calc;
+#define LOG(...) Serial.printf(__VA_ARGS__)
+#else
+// C3: the chip's built-in USB serial port is the calculator link (build with
+// "USB CDC On Boot: Enabled"), so the debug log is switched off.
+#define Calc Serial
+#define LOG(...) \
+    do {         \
+    } while (0)
+#endif
 
 static std::string line_buf;
 static void send_line(const std::string &line);
@@ -126,7 +137,7 @@ static std::string after(const std::string &line, size_t prefix) {
 static void handle(const std::string &raw) {
     std::string line = raw;
     while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
-    Serial.printf("calc> %.60s\n", line.c_str());
+    LOG("calc> %.60s\n", line.c_str());
 
     if (line.empty()) return;  // a stray newline after a cancel
 
@@ -149,7 +160,7 @@ static void handle(const std::string &raw) {
     }
 
     if (line == "VIEW") {
-        if (!camera_ok()) return send_error("Camera not found.");
+        if (!camera_ok()) return send_error(HAS_CAMERA ? "Camera not found." : "This dongle has no camera.");
         if (!camera_preview(preview)) return send_error("Camera didn't send a picture.");
         char header[32];
         snprintf(header, sizeof header, "F:%d,%d,%d", PREVIEW_W, PREVIEW_H, PREVIEW_W * PREVIEW_H);
@@ -160,7 +171,7 @@ static void handle(const std::string &raw) {
     }
 
     if (line == "SNAP") {
-        if (!camera_ok()) return send_error("Camera not found.");
+        if (!camera_ok()) return send_error(HAS_CAMERA ? "Camera not found." : "This dongle has no camera.");
         if (!camera_snap()) return send_error("Couldn't take the picture. Try again.");
         send_line("S:Got it.");
         send_line("END");
@@ -168,7 +179,7 @@ static void handle(const std::string &raw) {
     }
 
     if (line == "PHOTO" || line.rfind("PHOTO:", 0) == 0) {
-        if (!camera_ok()) return send_error("Camera not found.");
+        if (!camera_ok()) return send_error(HAS_CAMERA ? "Camera not found." : "This dongle has no camera.");
         if (!camera_has_photo() && !camera_snap()) return send_error("Couldn't take the picture. Try again.");
         std::string note = line.size() > 6 ? line.substr(6, MAX_QUESTION) : "";
         size_t len = 0;
@@ -262,7 +273,11 @@ static void handle(const std::string &raw) {
             send_line("S:Wi-Fi: not connected");
         }
         send_line("S:Saved networks: " + std::to_string(wifi_saved_count()));
+#if HAS_CAMERA
         send_line(std::string("S:Camera: ") + (camera_ok() ? "ready" : "not found"));
+#else
+        send_line("S:Camera: none on this board");
+#endif
         send_line("S:Model: " CLAUDE_MODEL);
         send_wrapped('S', credit_line());
         send_line("END");
@@ -274,18 +289,25 @@ static void handle(const std::string &raw) {
 
 void setup() {
 
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
     Serial.begin(115200);  // debug log on the UART pins, not the calculator
     USB.productName("TI-84 Claude Link");
     USB.manufacturerName("ti84-claude");
     Calc.begin();
     USB.begin();
+#else
+    Calc.setTxTimeoutMs(50);  // don't stall long if the calculator stops reading
+    Calc.begin(115200);
+#endif
 
     credit_begin();
     claude_set_cancel_check(cancel_requested);
     claude_set_tick(tick);
+#if HAS_CAMERA
     bool cam = false;
     for (int i = 0; i < 3 && !cam; i++) cam = camera_begin() || camera_ok();
-    Serial.printf("camera: %s\n", cam ? "ok" : "not found");
+    LOG("camera: %s\n", cam ? "ok" : "not found");
+#endif
     wifi_begin();
 }
 

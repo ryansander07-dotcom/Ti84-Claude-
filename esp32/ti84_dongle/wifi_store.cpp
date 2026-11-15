@@ -51,9 +51,18 @@ void store() {
     prefs.end();
 }
 
+// Small ESP32-C3 boards have a poor antenna layout: at full power the radio
+// swamps itself and the board barely sees any networks. Lower power fixes it.
+void lower_tx_power() {
+#if !defined(CONFIG_IDF_TARGET_ESP32S3)
+    WiFi.setTxPower(WIFI_POWER_8_5dBm);
+#endif
+}
+
 bool connect_to(const std::string &ssid, const std::string &password, uint32_t timeout_ms) {
     WiFi.disconnect();
     WiFi.begin(ssid.c_str(), password.empty() ? nullptr : password.c_str());
+    lower_tx_power();
     uint32_t start = millis();
     while (millis() - start < timeout_ms) {
         wl_status_t st = WiFi.status();
@@ -107,6 +116,7 @@ void keep_connected(void *) {
 void wifi_begin() {
     lock = xSemaphoreCreateMutex();
     WiFi.mode(WIFI_STA);
+    lower_tx_power();
     WiFi.setAutoReconnect(true);
     load();
     xTaskCreatePinnedToCore(keep_connected, "wifi", 6144, nullptr, 1, nullptr, 0);
