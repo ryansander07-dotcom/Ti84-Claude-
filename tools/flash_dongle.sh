@@ -11,8 +11,11 @@ FQBN_S3="esp32:esp32:esp32s3:USBMode=default,CDCOnBoot=default,PSRAM=opi,FlashSi
 FQBN_C3="esp32:esp32:esp32c3:CDCOnBoot=cdc,FlashSize=4M,PartitionScheme=huge_app,DebugLevel=none"
 ESPTOOL="$(ls -d "$HOME"/Library/Arduino15/packages/esp32/tools/esptool_py/*/ 2>/dev/null | tail -1)esptool"
 
-if [ ! -f "$SKETCH/secrets.h" ]; then
-  echo "Missing $SKETCH/secrets.h. Copy secrets.example.h to secrets.h and put your API key in it."
+# Which key file to build with: secrets.h by default, or another person's
+# file given as the first argument (esp32/secrets/<name>.h).
+KEYFILE="${1:-$SKETCH/secrets.h}"
+if [ ! -f "$KEYFILE" ]; then
+  echo "Missing $KEYFILE. Copy esp32/ti84_dongle/secrets.example.h there and put the API key in it."
   exit 1
 fi
 # Arduino's sketch scanner (ctags) is Intel-only; this sketch doesn't need it.
@@ -46,7 +49,10 @@ echo "Found an $CHIP board."
 BUILD="$BUILD/$CHIP"
 mkdir -p "$BUILD"
 printf '#!/bin/sh\nexit 0\n' > "$BUILD/noctags" && chmod +x "$BUILD/noctags"
-echo "Building the dongle firmware..."
+# Build from a copy of the sketch with this key file as its secrets.h.
+rm -rf "$BUILD/ti84_dongle" && cp -R "$SKETCH" "$BUILD/ti84_dongle" && cp "$KEYFILE" "$BUILD/ti84_dongle/secrets.h"
+SKETCH="$BUILD/ti84_dongle"
+echo "Building the dongle firmware with $(basename "$KEYFILE")..."
 arduino-cli compile -b "$FQBN" --build-path "$BUILD/out" \
   --build-property "tools.ctags.path=$BUILD" --build-property "tools.ctags.cmd.path=$BUILD/noctags" \
   "$SKETCH" | grep -E "Sketch uses|error" || true

@@ -20,3 +20,4 @@ esp32/**/secrets.h
 
 # Third-party calculator files downloaded for installing
 calculator/send-to-calculator/
+esp32/secrets/
