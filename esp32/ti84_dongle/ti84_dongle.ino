@@ -396,6 +396,10 @@ static void handle(const std::string &raw) {
 }
 
 void setup() {
+#if STATUS_LED_PIN >= 0
+    pinMode(STATUS_LED_PIN, OUTPUT);
+    digitalWrite(STATUS_LED_PIN, STATUS_LED_ON);  // on = the dongle has power
+#endif
 
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
     Serial.begin(115200);  // debug log on the UART pins, not the calculator

@@ -98,6 +98,18 @@ void link_cancel(void) {
     write_all("\x18\n", 2, CLOCKS_PER_SEC / 4);
 }
 
+/* A key pressed while waiting on the dongle. Kept here so it isn't lost. */
+static uint8_t held_key;
+bool link_quiet;
+
+uint8_t link_key(void) {
+    uint8_t k = held_key ? held_key : os_GetCSC();
+    held_key = 0;
+    return k;
+}
+
+void link_unget_key(uint8_t k) { held_key = k; }
+
 int link_read_line(char *buf, size_t size, uint32_t timeout_s, bool allow_cancel) {
     clock_t deadline = clock() + (clock_t)timeout_s * CLOCKS_PER_SEC;
     for (;;) {
@@ -116,7 +128,12 @@ int link_read_line(char *buf, size_t size, uint32_t timeout_s, bool allow_cancel
             return (int)keep;
         }
         if (rx_len >= sizeof rx) rx_len = 0; /* runaway line: drop it */
-        if (allow_cancel && os_GetCSC() == sk_Clear) return LINK_CANCELLED;
+        if (!held_key) held_key = os_GetCSC();
+        if (held_key && link_quiet) return LINK_CANCELLED; /* key stays held for the caller */
+        if (allow_cancel && held_key == sk_Clear) {
+            held_key = 0;
+            return LINK_CANCELLED;
+        }
         if (clock() > deadline) return LINK_TIMEOUT;
     }
 }

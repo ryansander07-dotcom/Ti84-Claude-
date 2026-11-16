@@ -25,6 +25,15 @@ void link_cancel(void);
    the LINK_ codes. Pressing [clear] cancels when allow_cancel is true. */
 int link_read_line(char *buf, size_t size, uint32_t timeout_s, bool allow_cancel);
 
+/* The next key pressed: one pressed while waiting on the dongle first, else
+   os_GetCSC(). Use this instead of os_GetCSC() so no key press is lost. */
+uint8_t link_key(void);
+void link_unget_key(uint8_t k);
+
+/* While true (background checks), any key press stops link_read_line at once
+   with LINK_CANCELLED and stays waiting in link_key(). */
+extern bool link_quiet;
+
 /* Read exactly len raw bytes. */
 bool link_read_bytes(uint8_t *dst, size_t len, uint32_t timeout_s);
 

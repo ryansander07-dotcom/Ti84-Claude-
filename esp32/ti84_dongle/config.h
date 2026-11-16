@@ -8,9 +8,14 @@
 #if defined(CONFIG_IDF_TARGET_ESP32S3)
 #define HAS_CAMERA 1
 #define BOARD_NAME "ESP32-S3"
+#define STATUS_LED_PIN -1  // the W11 has no LED of its own
 #else
 #define HAS_CAMERA 0
 #define BOARD_NAME "ESP32-C3"
+// The little blue LED on ESP32-C3 SuperMini-style boards. It lights when the
+// pin is pulled low. The dongle turns it on as soon as it starts.
+#define STATUS_LED_PIN 8
+#define STATUS_LED_ON LOW
 #endif
 
 // Claude Opus 5.5 is the most accurate. "claude-haiku-5-5" is faster and

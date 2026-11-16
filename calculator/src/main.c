@@ -90,7 +90,7 @@ static void show_message(const char *title, const char *hint) {
 static void wait_for_key(void) {
     for (;;) {
         link_poll();
-        uint8_t k = os_GetCSC();
+        uint8_t k = link_key();
         if (k == sk_Enter || k == sk_Clear) return;
     }
 }
@@ -177,7 +177,7 @@ static bool get_text(const char *prompt, enum mode mode, size_t max_len) {
     draw_input(prompt, mode, second);
     for (;;) {
         link_poll();
-        uint8_t k = os_GetCSC();
+        uint8_t k = link_key();
         if (!k) continue;
         size_t len = strlen(input);
         if (k == sk_Enter) {
@@ -212,6 +212,7 @@ static bool get_text(const char *prompt, enum mode mode, size_t max_len) {
 /* Check something is answering on USB: send PING and wait briefly for PONG.
    Anything else that arrives first (the end of a cancelled answer) is thrown away. */
 static bool ping_cancelled;
+static bool reply_stale; /* a cancelled reply may still be arriving */
 static bool ping(void) {
     ping_cancelled = false;
     if (!link_send("PING")) return false;
@@ -238,7 +239,10 @@ static bool require_link(void) {
         return false;
     }
     show_message("Checking the dongle...", "clear: cancel");
-    if (ping()) return true;
+    if (ping()) {
+        reply_stale = false;
+        return true;
+    }
     if (ping_cancelled) return false; /* [clear]: just go back */
     show_message("Nothing answered on USB.", "enter: back");
     put_row(2, "Plugged into a computer?");
@@ -253,11 +257,28 @@ static bool require_link(void) {
 /* Send a request and collect its reply lines until END. Returns false if the
    user cancelled or the link failed (an explanation is already in `lines`).
    With waiting == NULL nothing is drawn (for quick background checks). */
+static bool collect_reply(const char *waiting, uint32_t timeout_s);
 static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
     line_count = 0;
     answer_total = -1;
     window_start = 0;
     if (waiting ? !require_link() : !link_ready()) return false;
+    if (!waiting) {
+        /* Background check: leave a waiting key press for the caller. */
+        uint8_t k = link_key();
+        if (k) {
+            link_unget_key(k);
+            return false;
+        }
+        if (reply_stale) {
+            /* The end of a cancelled reply may still be on its way: PING drops it. */
+            link_quiet = true;
+            bool ok = ping();
+            link_quiet = false;
+            if (!ok) return false;
+            reply_stale = false;
+        }
+    }
     if (waiting) show_message(waiting, "clear: cancel");
     if (!link_send(msg)) {
         strcpy(lines[0], "Couldn't send. Is the");
@@ -269,6 +290,13 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
 
     /* Give up when nothing at all has come for a while. While Claude works the
        dongle sends H:<seconds> every 2 s, so a long answer never trips this. */
+    link_quiet = (waiting == NULL);
+    bool ok = collect_reply(waiting, timeout_s);
+    link_quiet = false;
+    return ok;
+}
+
+static bool collect_reply(const char *waiting, uint32_t timeout_s) {
     clock_t last_heard = clock();
     uint32_t idle_limit = timeout_s < IDLE_LIMIT ? timeout_s : IDLE_LIMIT;
     int dots = 0;
@@ -293,6 +321,7 @@ static bool request(const char *msg, const char *waiting, uint32_t timeout_s) {
             /* Tell the dongle to drop it and leave right away. Whatever it still
                sends is thrown away by the PING before the next request. */
             link_cancel();
+            reply_stale = true;
             line_count = 0;
             return false;
         }
@@ -381,7 +410,7 @@ static uint8_t show_lines_ex(const char *hint_text, uint32_t refresh_s) {
         clock_t shown_at = clock();
         do {
             link_poll();
-            k = os_GetCSC();
+            k = link_key();
             if (!k && refresh_s && top == 0 &&
                 (uint32_t)((clock() - shown_at) / CLOCKS_PER_SEC) >= refresh_s)
                 return 0;
@@ -436,7 +465,7 @@ static bool draw_preview(void) {
     static uint8_t row[PREVIEW_W];
     uint8_t *screen = (uint8_t *)gfx_vbuffer;
     for (int y = 0; y < PREVIEW_H; y++) {
-        uint8_t k = os_GetCSC();
+        uint8_t k = link_key();
         if (k) pending_key = k;
         if (pending_key == sk_Clear) return false; /* leave now; the PING before the next request drops the rest */
         if (!link_read_bytes(row, PREVIEW_W, QUICK_TIMEOUT)) return false;
@@ -456,7 +485,7 @@ static enum photo_choice aim_and_snap(void) {
         bool snapped = false;
         while (!snapped) {
             link_poll();
-            uint8_t k = pending_key ? pending_key : os_GetCSC();
+            uint8_t k = pending_key ? pending_key : link_key();
             pending_key = 0;
             if (k == sk_Clear) return PHOTO_CANCEL;
             if (k == sk_Enter) {
@@ -492,7 +521,7 @@ static enum photo_choice aim_and_snap(void) {
         gfx_SetDrawBuffer();
         for (;;) {
             link_poll();
-            uint8_t k = os_GetCSC();
+            uint8_t k = link_key();
             if (k == sk_Clear) break;
             if (ok && k == sk_Enter) return PHOTO_SOLVE;
             if (ok && k == sk_Yequ) return PHOTO_NOTE;
@@ -563,7 +592,7 @@ static int pick(const char *title, char items[][NAME_LEN + 1], int count, const 
         uint8_t k;
         do {
             link_poll();
-            k = os_GetCSC();
+            k = link_key();
         } while (!k);
         if (k == sk_Clear) return -1;
         if (k == sk_Down && sel < count - 1) sel++;
@@ -663,7 +692,7 @@ static void wifi(void) {
         uint8_t k;
         do {
             link_poll();
-            k = os_GetCSC();
+            k = link_key();
         } while (!k);
         if (k == sk_Clear) return;
         if (k == sk_1) find_networks();
@@ -688,7 +717,7 @@ static void credit(void) {
         uint8_t k;
         do {
             link_poll();
-            k = os_GetCSC();
+            k = link_key();
         } while (!k);
         if (k != sk_1) return;
         if (!get_text("Balance in $ (like 4.95)", MODE_MATH, 10)) continue;
@@ -727,7 +756,7 @@ static void chat_setup(void) {
         uint8_t k;
         do {
             link_poll();
-            k = os_GetCSC();
+            k = link_key();
         } while (!k);
         if (k == sk_Clear) return;
         if (k == sk_1) {
@@ -834,12 +863,13 @@ int main(void) {
         }
         /* Look for new chat messages every 10 s while the menu is up. */
         if (link_ready() && clock() - last_check > 10 * CLOCKS_PER_SEC) {
+            int before = chat_unread;
             check_unread();
-            draw_menu();
+            if (chat_unread != before) draw_menu();
             last_check = clock();
         }
         link_poll();
-        uint8_t k = os_GetCSC();
+        uint8_t k = link_key();
         if (k == sk_Clear) break;
         bool acted = true;
         if (k == sk_1) ask_question();
@@ -850,8 +880,12 @@ int main(void) {
         else if (k == sk_6) chat();
         else acted = false;
         if (acted) {
-            if (link_ready()) check_unread();
             draw_menu();
+            if (link_ready()) {
+                int before = chat_unread;
+                check_unread();
+                if (chat_unread != before) draw_menu();
+            }
             last_check = clock();
         }
     }
