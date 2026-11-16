@@ -1,7 +1,8 @@
 /* TI-84 Plus CE program for the Claude dongle.
  *
  * Menus: ask a question, photograph a problem with the dongle's camera,
- * join and manage Wi-Fi, see the API credit estimate, and check status. Talks the line protocol in the README over
+ * join and manage Wi-Fi, see the API credit estimate, check status, and chat
+ * with another calculator that has a dongle. Talks the line protocol in the README over
  * USB, so it also works with bridge.py on a computer for testing.
  */
 #include <graphx.h>
@@ -345,9 +346,12 @@ static bool fetch_page(int first) {
     return ok && line_count > 0;
 }
 
-/* Scrollable view of `lines`, or of a paged answer kept on the dongle. */
-static void show_lines(void) {
-    if (line_count == 0) return;
+/* Scrollable view of `lines`, or of a paged answer kept on the dongle.
+   Returns the key that closed it ([clear] or [enter], plus [mode] when `hint`
+   is given), or 0 when `refresh_s` seconds pass with no key while at the top,
+   so the caller can reload. */
+static uint8_t show_lines_ex(const char *hint_text, uint32_t refresh_s) {
+    if (line_count == 0) return sk_Clear;
     int total = answer_total > line_count ? answer_total : line_count;
     bool paged = total > line_count;
     int top = 0;
@@ -357,14 +361,16 @@ static void show_lines(void) {
             !fetch_page(top)) {
             show_message("Lost the dongle.", "enter: back");
             wait_for_key();
-            return;
+            return sk_Clear;
         }
         for (uint8_t r = 0; r < BODY_ROWS; r++) {
             int i = top + r - window_start;
             put_row(r, i >= 0 && i < line_count ? lines[i] : "");
         }
         char hint[COLS];
-        if (max_top > 0)
+        if (hint_text)
+            snprintf(hint, sizeof hint, "%s", hint_text);
+        else if (max_top > 0)
             snprintf(hint, sizeof hint, "%d-%d/%d arrows clr=back", top + 1,
                      top + BODY_ROWS < total ? top + BODY_ROWS : total, total);
         else
@@ -372,17 +378,23 @@ static void show_lines(void) {
         put_row(ROWS - 1, hint);
 
         uint8_t k;
+        clock_t shown_at = clock();
         do {
             link_poll();
             k = os_GetCSC();
+            if (!k && refresh_s && top == 0 &&
+                (uint32_t)((clock() - shown_at) / CLOCKS_PER_SEC) >= refresh_s)
+                return 0;
         } while (!k);
-        if (k == sk_Clear || k == sk_Enter) return;
+        if (k == sk_Clear || k == sk_Enter || (hint_text && k == sk_Mode)) return k;
         if (k == sk_Down && top < max_top) top++;
         if (k == sk_Up && top > 0) top--;
         if (k == sk_Right) top = top + BODY_ROWS < max_top ? top + BODY_ROWS : max_top;
         if (k == sk_Left) top = top > BODY_ROWS ? top - BODY_ROWS : 0;
     }
 }
+
+static void show_lines(void) { show_lines_ex(NULL, 0); }
 
 /* ---------- menus ---------- */
 
@@ -686,6 +698,82 @@ static void credit(void) {
     }
 }
 
+/* ---------- chat with another calculator ---------- */
+
+static int chat_unread = -1; /* -1: not asked (or an older dongle) */
+
+static void check_unread(void) {
+    if (request("CHATU", NULL, PING_TIMEOUT) && line_count > 0 && line_kind[0] == 'U')
+        chat_unread = atoi(lines[0]);
+}
+
+static bool chat_has_code(void) {
+    return request("CHATINFO", NULL, QUICK_TIMEOUT) && line_count > 0 && !strstr(lines[0], "not set");
+}
+
+static void chat_setup(void) {
+    for (;;) {
+        if (!request("CHATINFO", "Checking...", QUICK_TIMEOUT)) {
+            show_lines();
+            return;
+        }
+        clear_screen();
+        put_row(0, "Chat setup");
+        for (int i = 0; i < line_count && i < 3; i++) put_row((uint8_t)(i + 1), lines[i]);
+        put_row(5, "1: Set pair code");
+        put_row(6, "2: Set my name");
+        put_row(8, "Both calcs: same code.");
+        put_row(ROWS - 1, "clear: back");
+        uint8_t k;
+        do {
+            link_poll();
+            k = os_GetCSC();
+        } while (!k);
+        if (k == sk_Clear) return;
+        if (k == sk_1) {
+            if (!get_text("Pair code (6+ letters):", MODE_LOWER, 40)) continue;
+            snprintf(message, sizeof message, "CHATCODE:%s", input);
+        } else if (k == sk_2) {
+            if (!get_text("Your name (12 max):", MODE_UPPER, 12)) continue;
+            snprintf(message, sizeof message, "CHATNAME:%s", input);
+        } else {
+            continue;
+        }
+        request(message, "Saving...", QUICK_TIMEOUT);
+        show_lines();
+    }
+}
+
+static void chat(void) {
+    if (!require_link()) return;
+    if (!chat_has_code()) {
+        if (line_count > 0 && line_kind[0] == 'E') { /* an older dongle, or no reply */
+            show_lines();
+            return;
+        }
+        chat_setup();
+        if (!chat_has_code()) return;
+    }
+    bool quiet = false;
+    for (;;) {
+        /* The first load shows "Loading"; refreshes every few seconds are silent. */
+        if (!request("CHAT", quiet ? NULL : "Loading chat...", QUICK_TIMEOUT)) {
+            if (line_count == 0) return; /* cancelled */
+            show_lines();
+            return;
+        }
+        chat_unread = 0;
+        uint8_t k = show_lines_ex("enter=write mode=setup", 5);
+        quiet = k == 0;
+        if (k == sk_Clear) return;
+        if (k == sk_Mode) chat_setup();
+        if (k != sk_Enter) continue;
+        if (!get_text("Message:", MODE_LOWER, 200)) continue;
+        snprintf(message, sizeof message, "CHATSEND:%s", input);
+        if (!request(message, "Sending...", 60) || (line_count > 0 && line_kind[0] == 'E')) show_lines();
+    }
+}
+
 static void status(void) {
     request("STATUS", "Checking...", QUICK_TIMEOUT);
     show_lines();
@@ -709,6 +797,12 @@ static void draw_menu(void) {
     put_row(3, "3: Wi-Fi");
     put_row(4, "4: Credit");
     put_row(5, "5: Status");
+    char chat_row[COLS + 1];
+    if (chat_unread > 0)
+        snprintf(chat_row, sizeof chat_row, "6: Chat (%d new)", chat_unread);
+    else
+        snprintf(chat_row, sizeof chat_row, "6: Chat");
+    put_row(6, chat_row);
     put_row(7, link_ready() ? "Dongle: connected" : "Dongle: not plugged in");
     char row[COLS + 1];
     credit_note(row, sizeof row);
@@ -726,11 +820,23 @@ int main(void) {
     }
 
     bool was_ready = !link_ready();
+    clock_t last_check = clock();
     for (;;) {
         if (link_ready() != was_ready) {
             was_ready = link_ready();
             draw_menu();
             if (was_ready && request("CREDIT", NULL, PING_TIMEOUT)) draw_menu(); /* for the warning line */
+            if (was_ready) {
+                check_unread();
+                draw_menu();
+            }
+            last_check = clock();
+        }
+        /* Look for new chat messages every 10 s while the menu is up. */
+        if (link_ready() && clock() - last_check > 10 * CLOCKS_PER_SEC) {
+            check_unread();
+            draw_menu();
+            last_check = clock();
         }
         link_poll();
         uint8_t k = os_GetCSC();
@@ -741,8 +847,13 @@ int main(void) {
         else if (k == sk_3) wifi();
         else if (k == sk_4) credit();
         else if (k == sk_5) status();
+        else if (k == sk_6) chat();
         else acted = false;
-        if (acted) draw_menu();
+        if (acted) {
+            if (link_ready()) check_unread();
+            draw_menu();
+            last_check = clock();
+        }
     }
 
     link_end();

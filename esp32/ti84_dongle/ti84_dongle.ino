@@ -11,11 +11,13 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
 #include "calc_text.h"
 #include "camera.h"
+#include "chat.h"
 #include "claude.h"
 #include "config.h"
 #include "credit.h"
@@ -135,9 +137,7 @@ static void reply_with_claude(const ClaudeReply &reply) {
 // is still going (several seconds on an ESP32-C3). After a cancel the task is
 // told to stop and its answer is dropped.
 struct ClaudeJob {
-    std::string question;
-    const uint8_t *jpeg;
-    size_t len;
+    std::function<ClaudeReply()> work;
     ClaudeReply reply;
 };
 static ClaudeJob *job = nullptr;
@@ -148,7 +148,7 @@ static bool job_aborted() { return job_abort; }
 
 static void claude_task(void *arg) {
     ClaudeJob *j = static_cast<ClaudeJob *>(arg);
-    j->reply = ask_claude(j->question, j->jpeg, j->len);
+    j->reply = j->work();
     job_running = false;
     vTaskDelete(nullptr);
 }
@@ -159,30 +159,52 @@ static void wait_for_job() {
     while (job_running) delay(10);
 }
 
-static void run_claude(const std::string &question, const uint8_t *jpeg = nullptr, size_t len = 0) {
+// Run slow network work in the job task, with heartbeats and cancel. Returns
+// false if the calculator cancelled (it has already left); otherwise the
+// result is in job->reply.
+static bool run_job(std::function<ClaudeReply()> work) {
     start_work();
     while (job_running) {  // the last cancelled request hasn't let go yet
         tick();
-        if (cancel_requested()) return;
+        if (cancel_requested()) return false;
         delay(10);
     }
     delete job;
-    job = new ClaudeJob{question, jpeg, len, {false, ""}};
+    job = new ClaudeJob{work, {false, ""}};
     job_abort = false;
     job_running = true;
     if (xTaskCreate(claude_task, "claude", 16384, job, 1, nullptr) != pdPASS) {
         job_running = false;
-        return reply_with_claude({false, "The dongle is low on memory. Unplug it and plug it back in."});
+        job->reply = {false, "The dongle is low on memory. Unplug it and plug it back in."};
+        return true;
     }
     while (job_running) {
         tick();
         if (cancel_requested()) {
             job_abort = true;  // the calculator has already left this screen
-            return;
+            return false;
         }
         delay(10);
     }
-    reply_with_claude(job->reply);
+    return true;
+}
+
+static void run_claude(const std::string &question, const uint8_t *jpeg = nullptr, size_t len = 0) {
+    if (run_job([=] { return ask_claude(question, jpeg, len); })) reply_with_claude(job->reply);
+}
+
+// A paged list of lines kept here, like an answer, without the credit note.
+static void send_paged(std::vector<std::string> lines) {
+    answer = std::move(lines);
+    send_line("P:" + std::to_string(answer.size()));
+    send_page(0);
+    send_line("END");
+}
+
+static void send_ok(const std::string &err, const std::string &ok_text) {
+    if (!err.empty()) return send_error(err);
+    send_wrapped('S', ok_text);
+    send_line("END");
 }
 
 static std::string after(const std::string &line, size_t prefix) {
@@ -243,6 +265,33 @@ static void handle(const std::string &raw) {
         size_t len = 0;
         const uint8_t *jpeg = camera_photo(&len);
         return run_claude(note, jpeg, len);
+    }
+
+    // Chat with another calculator (chat.h).
+    if (line == "CHAT") return send_paged(chat_view());
+    if (line == "CHATU") {
+        send_line("U:" + std::to_string(chat_unread()));
+        send_line("END");
+        return;
+    }
+    if (line == "CHATINFO") {
+        send_line("S:Pair code: " + (chat_code().empty() ? std::string("not set") : chat_code()));
+        send_line("S:Your name: " + chat_name());
+        send_wrapped('S', chat_status());
+        send_line("END");
+        return;
+    }
+    if (line.rfind("CHATCODE:", 0) == 0) return send_ok(chat_set_code(after(line, 9)), line.size() > 9 ? "Pair code saved." : "Chat turned off.");
+    if (line.rfind("CHATNAME:", 0) == 0) return send_ok(chat_set_name(after(line, 9)), "Name saved.");
+    if (line.rfind("CHATSEND:", 0) == 0) {
+        std::string text = after(line, 9);
+        if (!run_job([=] {
+                std::string err = chat_send(text);
+                return ClaudeReply{err.empty(), err};
+            }))
+            return;
+        if (!job->reply.ok) return send_error(job->reply.text);
+        return send_paged(chat_view());
     }
 
     if (line == "SCAN") {
@@ -337,6 +386,8 @@ static void handle(const std::string &raw) {
 #endif
         send_line("S:Model: " CLAUDE_MODEL);
         send_wrapped('S', credit_line());
+        send_wrapped('S', chat_status());
+        send_line("S:Free memory: " + std::to_string(ESP.getFreeHeap() / 1024) + " KB");
         send_line("END");
         return;
     }
@@ -365,6 +416,7 @@ void setup() {
     LOG("camera: %s\n", cam ? "ok" : "not found");
 #endif
     wifi_begin();
+    chat_begin();
 }
 
 void loop() {

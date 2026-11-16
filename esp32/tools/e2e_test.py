@@ -179,6 +179,7 @@ def main():
         lines, _ = c.request("PHOTO:what is this?")
         check("No camera: PHOTO is refused", any(l.startswith("E:") for l in lines or []), str(lines))
     wifi_and_mistakes(c)
+    chat_checks(c)
 
 
 def camera_checks(c):
@@ -246,6 +247,54 @@ def wifi_and_mistakes(c):
     lines, _ = c.request("NONSENSE")
     check("Unknown message is refused", any(l.startswith("E:") for l in lines or []))
 
+
+
+def chat_checks(c):
+    """9. Chat: the dongle and this computer (chat_peer.py) talk through ntfy.sh.
+    Puts the dongle's own pair code back afterwards."""
+    import random
+    import threading
+    import chat_peer as peer
+
+    lines, _ = c.request("CHATINFO")
+    old = next((l[len("S:Pair code: "):] for l in lines or [] if l.startswith("S:Pair code: ")), "not set")
+    code = "e2etest" + "".join(random.choice("abcdefghjkmnpqrstuvwxyz23456789") for _ in range(10))
+    lines, _ = c.request("CHATCODE:" + code)
+    check("Chat: pair code accepted", any("saved" in l for l in lines or []), str(lines))
+    lines, _ = c.request("CHATCODE:abc")
+    check("Chat: too-short code refused", any(l.startswith("E:") for l in lines or []))
+    topic, key = peer.derive(code)
+
+    heard = []
+    threading.Thread(target=peer.listen, args=(topic, key, "e2e", "all", lambda e, m, n, t: heard.append(t)),
+                     daemon=True).start()
+    time.sleep(2)
+    lines, info = c.request("CHATSEND:hello from the calculator", 60)
+    check("Chat: CHATSEND sends", any("hello from the calculator" in l for l in lines or []),
+          f"{info.get('seconds', 0):.1f} s, {lines[:3] if lines else lines}")
+    for _ in range(40):
+        if "hello from the calculator" in heard:
+            break
+        time.sleep(0.5)
+    check("Chat: the other side gets it (and can decrypt it)", "hello from the calculator" in heard, str(heard))
+
+    peer.send(topic, key, "e2e", "Friend", "hi back from the other calculator")
+    count = 0
+    for _ in range(30):
+        lines, _ = c.request("CHATU")
+        count = int(lines[0][2:]) if lines and lines[0].startswith("U:") else 0
+        if count:
+            break
+        time.sleep(1)
+    check("Chat: new message counted", count == 1, f"{count} unread")
+    lines, info = c.request("CHAT")
+    check("Chat: CHAT shows it, newest first", bool(lines) and "Friend" in lines[0] and "hi back" in " ".join(lines[:3]),
+          str((lines or [])[:4]))
+    lines, _ = c.request("CHATU")
+    check("Chat: looking marks it read", lines == ["U:0"], str(lines))
+    restore = "" if old == "not set" else old
+    lines, _ = c.request("CHATCODE:" + restore)
+    check("Chat: pair code put back", any(l.startswith("S:") for l in lines or []), f"back to {old!r}")
 
 
 def report():
