@@ -130,6 +130,61 @@ static void reply_with_claude(const ClaudeReply &reply) {
     send_line("END");
 }
 
+// Claude requests run in their own task so this loop stays free: it sends the
+// heartbeat and notices [clear] right away, even while the slow TLS handshake
+// is still going (several seconds on an ESP32-C3). After a cancel the task is
+// told to stop and its answer is dropped.
+struct ClaudeJob {
+    std::string question;
+    const uint8_t *jpeg;
+    size_t len;
+    ClaudeReply reply;
+};
+static ClaudeJob *job = nullptr;
+static volatile bool job_running = false;
+static volatile bool job_abort = false;
+
+static bool job_aborted() { return job_abort; }
+
+static void claude_task(void *arg) {
+    ClaudeJob *j = static_cast<ClaudeJob *>(arg);
+    j->reply = ask_claude(j->question, j->jpeg, j->len);
+    job_running = false;
+    vTaskDelete(nullptr);
+}
+
+// A cancelled request may still be finishing; wait before starting anything
+// that uses the network, the camera or the photo it was sending.
+static void wait_for_job() {
+    while (job_running) delay(10);
+}
+
+static void run_claude(const std::string &question, const uint8_t *jpeg = nullptr, size_t len = 0) {
+    start_work();
+    while (job_running) {  // the last cancelled request hasn't let go yet
+        tick();
+        if (cancel_requested()) return;
+        delay(10);
+    }
+    delete job;
+    job = new ClaudeJob{question, jpeg, len, {false, ""}};
+    job_abort = false;
+    job_running = true;
+    if (xTaskCreate(claude_task, "claude", 16384, job, 1, nullptr) != pdPASS) {
+        job_running = false;
+        return reply_with_claude({false, "The dongle is low on memory. Unplug it and plug it back in."});
+    }
+    while (job_running) {
+        tick();
+        if (cancel_requested()) {
+            job_abort = true;  // the calculator has already left this screen
+            return;
+        }
+        delay(10);
+    }
+    reply_with_claude(job->reply);
+}
+
 static std::string after(const std::string &line, size_t prefix) {
     return line.size() > prefix ? line.substr(prefix) : "";
 }
@@ -155,9 +210,12 @@ static void handle(const std::string &raw) {
     if (line.rfind("Q:", 0) == 0) {
         std::string q = line.substr(2, MAX_QUESTION);
         if (q.find_first_not_of(' ') == std::string::npos) return send_error("Type a question first.");
-        start_work();
-        return reply_with_claude(ask_claude(q));
+        return run_claude(q);
     }
+
+    if (line == "VIEW" || line == "SNAP" || line.rfind("PHOTO", 0) == 0 || line == "SCAN" ||
+        line.rfind("WIFI:", 0) == 0 || line.rfind("JOIN:", 0) == 0 || line.rfind("FORGET:", 0) == 0)
+        wait_for_job();
 
     if (line == "VIEW") {
         if (!camera_ok()) return send_error(HAS_CAMERA ? "Camera not found." : "This dongle has no camera.");
@@ -184,8 +242,7 @@ static void handle(const std::string &raw) {
         std::string note = line.size() > 6 ? line.substr(6, MAX_QUESTION) : "";
         size_t len = 0;
         const uint8_t *jpeg = camera_photo(&len);
-        start_work();
-        return reply_with_claude(ask_claude(note, jpeg, len));
+        return run_claude(note, jpeg, len);
     }
 
     if (line == "SCAN") {
@@ -301,8 +358,7 @@ void setup() {
 #endif
 
     credit_begin();
-    claude_set_cancel_check(cancel_requested);
-    claude_set_tick(tick);
+    claude_set_cancel_check(job_aborted);
 #if HAS_CAMERA
     bool cam = false;
     for (int i = 0; i < 3 && !cam; i++) cam = camera_begin() || camera_ok();
