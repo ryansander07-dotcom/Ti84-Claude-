@@ -8,7 +8,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 export PATH="$HOME/CEdev/bin:$PATH"
 OUT="$REPO/calculator/send-to-calculator"
 cd "$REPO/calculator"
-make APPLICATION=YES APPLICATION_DESCRIPTION='"Ask Claude"' BINDIR=bin/app OBJDIR=obj/app | grep -E "success|error"
+make APPLICATION=YES APPLICATION_DESCRIPTION='"Ask Claude"' BINDIR=bin/app OBJDIR=obj/app | grep -E "success|error" || true
 convbin --iformat 8ek --input bin/app/CLAUDE.8ek --oformat 8xv-split --maxvarsize 65200 \
   --output bin/app/CLAPP.8xv --name CLAPP | grep success
 cp bin/app/CLAPP.0.8xv "$OUT/CLAPP0.8xv"
