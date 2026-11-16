@@ -177,7 +177,14 @@ ClaudeReply ask_claude(const std::string &question, const uint8_t *jpeg, size_t 
     WiFiClientSecure client;
     client.setCACert(TLS_ROOTS);
     client.setTimeout(30);  // seconds, for connect and the TLS handshake
-    if (!client.connect(HOST, 443)) return fail("No internet connection.");
+    // Another connection (chat) may be mid-handshake; on a small chip that can
+    // make this one fail at first, so try a few times.
+    bool connected = false;
+    for (int i = 0; i < 4 && !(connected = client.connect(HOST, 443)); i++) {
+        if (cancelled()) return fail("Cancelled.");
+        delay(1500);
+    }
+    if (!connected) return fail("No internet connection.");
 
     std::string headers = "POST /v1/messages HTTP/1.1\r\n";
     headers += "Host: " + std::string(HOST) + "\r\n";

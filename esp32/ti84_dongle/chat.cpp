@@ -40,7 +40,7 @@ std::string topic;
 uint8_t key[32];
 std::vector<Message> log_;  // oldest first
 std::string last_id;        // newest message seen, to resume the stream after a drop
-uint32_t seen = 0;          // newest message time the calculator has shown
+uint32_t seen = 0;          // time of the newest message from the other side the calculator has shown
 volatile int generation = 0;  // bumped when the pair code changes
 volatile bool streaming = false;
 uint32_t server_time = 0, server_millis = 0;  // ntfy.sh's clock, from its events
@@ -284,7 +284,11 @@ std::string chat_send(const std::string &raw) {
     WiFiClientSecure c;
     c.setCACert(TLS_ROOTS);
     c.setTimeout(20);
-    if (!c.connect(HOST, 443)) return "No internet connection.";
+    // The receiving connection may be in its own TLS handshake right now, and
+    // a small chip can't do two at once: give it a few tries.
+    bool connected = false;
+    for (int i = 0; i < 4 && !(connected = c.connect(HOST, 443)); i++) delay(1500);
+    if (!connected) return "No internet connection.";
     std::string req = "POST /" + t + " HTTP/1.0\r\nHost: ntfy.sh\r\nUser-Agent: ti84-dongle\r\n" +
                       "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
     c.write(reinterpret_cast<const uint8_t *>(req.data()), req.size());
@@ -340,7 +344,7 @@ std::vector<std::string> chat_view() {
         out.push_back("S:" + head.substr(0, SCREEN_WIDTH));
         for (const std::string &s : to_screen_lines(it->text)) out.push_back("A:" + s);
         out.push_back("S:");
-        newest = std::max(newest, it->time);
+        if (!it->mine) newest = std::max(newest, it->time);  // only their messages count as read/unread
     }
     out.pop_back();
     if (newest != seen) {
